@@ -337,7 +337,7 @@ def create_v10(path):
     # Cash OUT - all outgoing sub-types
     ws.cell(row=5, column=9, value="Cash OUT")
     out_types = ["PAYMENT", "MOTOR", "BHUSSA", "GAWALI", "CASH_ADV", "DISCOUNT", "WITHDRAWN", "REPAID", "GIVEN", "MANDI", "TRAVEL", "FOOD", "SALARY", "BF_DISC", "JB_PAID", "JB_WITHDRAW", "KK_WITHDRAW", "COMM_WITHDRAW", "PROFIT_WITHDRAW", "PAID", "MISC", "OTHER", "MHN_PERSONAL", "ADJUSTED", "PROFIT_TO_CAP"]
-    cash_out = '+'.join([f'SUMIFS(G:G,H:H,"CASH",D:D,"{st}")' for st in out_types])
+    cash_out = '+'.join([f'SUMIFS(G$4:G$1003,H$4:H$1003,"CASH",D$4:D$1003,"{st}")' for st in out_types])
     ws.cell(row=5, column=10, value=f'={cash_out}').number_format = MONEY_FMT
     
     # Bank OUT
@@ -345,13 +345,13 @@ def create_v10(path):
     bank_out_parts = []
     for mode in ["BANK", "UPI", "TRANSFER"]:
         for st in out_types:
-            bank_out_parts.append(f'SUMIFS(G:G,H:H,"{mode}",D:D,"{st}")')
+            bank_out_parts.append(f'SUMIFS(G$4:G$1003,H$4:H$1003,"{mode}",D$4:D$1003,"{st}")')
     ws.cell(row=6, column=10, value='=' + '+'.join(bank_out_parts)).number_format = MONEY_FMT
     
     # Cash IN - all incoming sub-types
     in_types = ["RECEIPT", "TAKEN", "RECEIVED", "PROVISION"]
     ws.cell(row=7, column=9, value="Cash IN")
-    cash_in = '+'.join([f'SUMIFS(G:G,H:H,"CASH",D:D,"{st}")' for st in in_types])
+    cash_in = '+'.join([f'SUMIFS(G$4:G$1003,H$4:H$1003,"CASH",D$4:D$1003,"{st}")' for st in in_types])
     ws.cell(row=7, column=10, value=f'={cash_in}').number_format = MONEY_FMT
     
     # Bank IN
@@ -359,7 +359,7 @@ def create_v10(path):
     bank_in_parts = []
     for mode in ["BANK", "UPI", "TRANSFER"]:
         for st in in_types:
-            bank_in_parts.append(f'SUMIFS(G:G,H:H,"{mode}",D:D,"{st}")')
+            bank_in_parts.append(f'SUMIFS(G$4:G$1003,H$4:H$1003,"{mode}",D$4:D$1003,"{st}")')
     ws.cell(row=8, column=10, value='=' + '+'.join(bank_in_parts)).number_format = MONEY_FMT
     
     ws.cell(row=10, column=9, value="CLOSING CASH").font = Font(bold=True)
