@@ -600,6 +600,15 @@ def create_v10(path):
     ws.add_data_validation(ak_dv)
     ak_dv.add('B3')
     
+    # Aakda starts at row 5, so row numbers in formulas must match actual Excel rows
+    # Row 5: empty, Row 6: A.SALES, Row 7: Qty Sold (B7), Row 8: Gross Sales (B8)
+    # Row 9: empty, Row 10: B.DEDUCTIONS, Row 11: Comm Type, Row 12: Comm%, Row 13: Flat
+    # Row 14: Comm Amt, Row 15: KK, Row 16: JB, Row 17: Motor, Row 18: Bhussa, Row 19: Gawali
+    # Row 20: Cash/Adv, Row 21: TOTAL DEDUCTIONS
+    # Row 22: empty, Row 23: C.CALCULATION, Row 24: Gross, Row 25: Deductions, Row 26: Opening
+    # Row 27: NET PAYABLE
+    # Row 28: empty, Row 29: D.PAYMENTS, Row 30: Payments, Row 31: JV Adj
+    # Row 32: empty, Row 33: BALANCE DUE
     aakda = [
         ["", ""],
         ["A. SALES", ""],
@@ -610,26 +619,26 @@ def create_v10(path):
         ["Commission Type", '=IF(IFERROR(INDEX(Masters!$D:$D,MATCH($B$3,Masters!$B:$B,0)),"")="","% Based","Flat ₹/Goat")'],
         ["Commission %", '=IFERROR(INDEX(Masters!$C:$C,MATCH($B$3,Masters!$B:$B,0)),4)'],
         ["Flat ₹/Goat", '=IFERROR(INDEX(Masters!$D:$D,MATCH($B$3,Masters!$B:$B,0)),"")'],
-        ["Commission Amt", '=IF(B14<>"",B14*B8,B9*B13/100)'],
-        ["KK (Fixed)", '=IF(B8>0,Masters!$Y$3,0)'],
-        ["JB", '=B8*Masters!$Y$4'],
+        ["Commission Amt", '=IF(B13<>"",B13*B7,B8*B12/100)'],
+        ["KK (Fixed)", '=IF(B7>0,Masters!$Y$3,0)'],
+        ["JB", '=B7*Masters!$Y$4'],
         ["Motor", '=SUMIFS(Cash_Book!$G:$G,Cash_Book!$C:$C,"BEPAARI",Cash_Book!$D:$D,"MOTOR",Cash_Book!$E:$E,$B$3)'],
         ["Bhussa", '=SUMIFS(Cash_Book!$G:$G,Cash_Book!$C:$C,"BEPAARI",Cash_Book!$D:$D,"BHUSSA",Cash_Book!$E:$E,$B$3)'],
         ["Gawali", '=SUMIFS(Cash_Book!$G:$G,Cash_Book!$C:$C,"BEPAARI",Cash_Book!$D:$D,"GAWALI",Cash_Book!$E:$E,$B$3)'],
         ["Cash/Adv", '=SUMIFS(Cash_Book!$G:$G,Cash_Book!$C:$C,"BEPAARI",Cash_Book!$D:$D,"CASH_ADV",Cash_Book!$E:$E,$B$3)'],
-        ["TOTAL DEDUCTIONS", '=SUM(B15:B21)'],
+        ["TOTAL DEDUCTIONS", '=SUM(B14:B20)'],
         ["", ""],
         ["C. CALCULATION", ""],
-        ["Gross Sales", '=B9'],
-        ["(-) Deductions", '=B22'],
+        ["Gross Sales", '=B8'],
+        ["(-) Deductions", '=B21'],
         ["(+) Opening Bal", '=IFERROR(INDEX(Masters!$E:$E,MATCH($B$3,Masters!$B:$B,0)),0)'],
-        ["NET PAYABLE", '=B25-B26+B27'],
+        ["NET PAYABLE", '=B24-B25+B26'],
         ["", ""],
         ["D. PAYMENTS & ADJUSTMENTS", ""],
         ["Payments Made", '=SUMIFS(Cash_Book!$G:$G,Cash_Book!$C:$C,"BEPAARI",Cash_Book!$D:$D,"PAYMENT",Cash_Book!$E:$E,$B$3)'],
         ["JV Adjustments", '=SUMIFS(JV_Entries!$G:$G,JV_Entries!$C:$C,"BEPAARI",JV_Entries!$D:$D,$B$3)-SUMIFS(JV_Entries!$G:$G,JV_Entries!$E:$E,"BEPAARI",JV_Entries!$F:$F,$B$3)'],
         ["", ""],
-        ["BALANCE DUE", '=B28-B31+B32']
+        ["BALANCE DUE", '=B27-B30+B31']
     ]
     for r, (lbl, frm) in enumerate(aakda, 5):
         ws.cell(row=r, column=1, value=lbl)
