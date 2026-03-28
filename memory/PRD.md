@@ -1,107 +1,137 @@
-# Mandi Accounting System - Product Requirements Document
+# Mandi Accounting Software - Product Requirements Document
 
 ## Original Problem Statement
 Build a software solution for managing accounting in a "Mandi" (livestock wholesale market in Mumbai). The user acts as a Commission Agent (Dalal/Aadatiya) bridging "Bepaaris" (Sellers/Goat owners) and "Dukandars" (Buyers).
 
-**Approach**: Build a "Perfected Excel Prototype" first (Phase 1) to finalize complex accounting logic before transitioning to a full-stack SaaS Web Application (Phase 2).
+## Development Phases
 
-## Current Phase: Excel Prototyping (Phase 1)
+### Phase 1: Excel Prototype (CURRENT - IN PROGRESS)
+Perfected Excel Prototype with two main input sheets (Daily Sales, Cash Book) that auto-calculates:
+- Bepaari/Dukandar Ledgers
+- Settlement Slips (Aakda)
+- Balance Sheet
 
-### Latest Version: V9 (December 2024)
-**Download**: `/frontend/public/Mandi_Master_V9.xlsx`
+### Phase 2: Full-Stack Web Application (FUTURE)
+Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
+- Multi-user/SaaS capabilities
+- Date-wise reporting
+- Automated month-end profit distribution
+- Journal Voucher (JV) screens
+- Audit trail
 
-### Core Features Implemented
+---
 
-#### Input Sheets (User enters data here):
-1. **Masters** - Party master data
-   - Bepaari Master (Name, Commission%, Opening Balance, Phone)
-   - Dukandar Master (Name, Opening Balance, Phone)
-   - Capital/Loan Parties (Name, Opening Balance, Type: CAPITAL/LOAN/AMANAT)
-   - Advance Parties
-   - Settings (Commission Rate, KK Fixed, JB Rate, Opening Cash/Bank, Zakat Opening)
+## Current Excel Version: V9.1
 
-2. **Daily_Sales** - Daily transactions
-   - Date, Bepaari, Dukandar, Qty, Rate, Gross, Discount, Net
+### Input Sheets
+1. **Daily_Sales** - Records all goat sales (Bepaari → Dukandar)
+2. **Cash_Book** - All cash/bank transactions with Type/Sub-Type dropdowns
 
-3. **Cash_Book** - All cash/bank transactions
-   - Type-specific Sub-Type dropdowns (INDIRECT formula)
-   - Dynamic Party dropdown based on Type
-   - Single Amount column + Mode of Payment (CASH/BANK/UPI/TRANSFER)
-   - Auto-calculated Cash/Bank summary
+### Auto-Generated Sheets
+- Bepaari_Ledger
+- Dukandar_Ledger
+- Capital_Loan_Ledger
+- Bepaari_Aakda (Settlement calculations)
+- Balance_Sheet
+- Commission_Summary
 
-#### Auto-Calculated Sheets:
-4. **Bepaari_Ledger** - Full bepaari accounting with deductions
-5. **Dukandar_Ledger** - Dukandar receivables tracking
-6. **Capital_Loan_Ledger** - NEW: Shows ALL investors/lenders with current balances
-7. **Bepaari_Aakda** - Settlement slip generator
-8. **Balance_Sheet** - Compact view (no blank rows), pulls from ledgers
-9. **Commission_Summary** - Profit/Loss summary
+### Key Features Implemented
+- B/F (Brought Forward) opening balances in Masters sheet
+- Flat commission rate (per goat) with override capability
+- Type-specific Sub-Type dropdowns using INDIRECT
+- Individual party receivables with formula: `Opening + GIVEN - RECEIVED`
+- Real-time ledger generation
+- Balance Sheet with Assets = Liabilities + Capital validation
 
-### Key Accounting Logic:
-- Commission: 4% default (per-piece override available)
-- Deductions: KK (fixed per bepaari), JB (per goat), Motor, Bhussa, Gawali, Cash Advance
-- JB Net = Collected - Paid (shown in Liabilities)
-- Excess payments: Bepaari overpaid → Asset, Dukandar overpaid → Liability
-- Zakat: Provisioned liability, paid out over time
+---
 
-### Technical Implementation:
-- Dynamic dropdowns using INDIRECT formula
-- Type-specific Sub-Type options
-- SUMIF/SUMIFS for ledger calculations
-- Named ranges for data validation
+## Business Logic Summary
 
-## Version History
+### Parties
+- **Bepaaris**: Sellers who bring goats (we owe them after sale)
+- **Dukandars**: Buyers who purchase goats (they owe us)
+- **Advance Parties**: External individuals we give/receive advances from
 
-| Version | Date | Key Changes |
-|---------|------|-------------|
-| V1-V5 | Mar 2024 | Initial iterations, structure refinement |
-| V6 | Mar 2024 | Dependent dropdowns, JB in liabilities, Capital separation |
-| V7 | Mar 2024 | Simplified Cash Book (Amount + Mode), removed 4 columns |
-| V8 | Mar 2024 | Type-specific Sub-Types, excess payments in Balance Sheet |
-| V9 | Dec 2024 | NEW Capital_Loan_Ledger sheet, COMPACT Balance Sheet (no blank rows) |
+### Deductions from Bepaari
+- Commission (4% or flat per-piece)
+- KK (Fixed ₹100 per Bepaari)
+- JB (₹10 per goat)
+- Motor (transport)
+- Bhussa (fodder)
+- Gawali (labor)
+- Cash Advance
 
-## Pending User Verification
-- V9 Excel functionality testing (user away for couple of days)
+### Balance Sheet Structure
+**Liabilities (We Owe):**
+- Capital (per investor)
+- Loans
+- Amanat
+- Bepaari Payables
+- Dukandar Advances (if overpaid)
+- JB Collected
+- KK Collected
+- Commission Earned
+- Zakat Payable
 
-## Phase 2: Web Application (Future)
+**Assets (We Have/Owed to Us):**
+- Cash Balance
+- Bank Balance
+- Patti (Dukandar Receivable)
+- Bepaari Advances (if overpaid)
+- Mandi Expenses
+- BF Discount
+- MHN Personal
+- Individual Receivables (Salim, Mudassir, KMN, Santosh, Shakil, Ayaan)
 
-### Planned Tech Stack:
-- **Frontend**: React
-- **Backend**: FastAPI (Python)
-- **Database**: MongoDB
+---
 
-### Migration Plan:
-- Masters → MongoDB collections (bepaaris, dukandars, capital_parties, settings)
-- Cash_Book → transactions collection with same fields
-- Daily_Sales → sales collection
-- Ledger calculations → Python functions (same SUMIF logic)
-- Balance Sheet → API endpoint returning calculated totals
+## Issues Fixed (Session: 29 March 2025)
 
-**Note**: All Excel logic will directly translate to code. No restart needed.
+### Issue: ₹200,000 Balance Sheet Discrepancy
+- **Root Cause**: Cell E11 "ADVANCES GIVEN (Net)" was aggregating ALL advances given/received, duplicating amounts already tracked in individual receivable rows (28-33)
+- **Solution**: Cleared contents of cells D11:E11
+- **Status**: RESOLVED - Balance Sheet now tallies
 
-## File Structure
-```
-/app/
-├── backend/
-│   ├── generate_mandi_excel.py (V1)
-│   ├── generate_mandi_excel_v2.py
-│   ├── generate_mandi_excel_v3.py
-│   ├── generate_mandi_excel_v4.py
-│   ├── generate_mandi_excel_v5.py
-│   ├── generate_mandi_excel_v6.py
-│   ├── generate_mandi_excel_v7.py
-│   ├── generate_mandi_excel_v8.py
-│   └── generate_mandi_excel_v9.py (CURRENT)
-├── frontend/
-│   └── public/
-│       └── Mandi_Master_V9.xlsx (CURRENT)
-└── memory/
-    └── PRD.md (this file)
-```
+---
 
-## User Preferences
-- Language: English
-- Simplified input workflow (only 2 main input sheets)
-- Type-specific dropdowns for data entry
-- Compact Balance Sheet without blank rows
-- Individual party breakdown in separate ledger sheet
+## Pending Items
+
+### User Testing in Progress
+- User is entering real historical data (currently on March 26th)
+- Testing against manual paper accounting records
+
+### Future Simplifications Requested
+- Sub-Type dropdown simplifications in Cash Book (details TBD)
+
+---
+
+## Files Reference
+
+### Excel Files
+- `/app/frontend/public/Mandi_Master_V9.1.xlsx` - Base generated version
+- User's local copy with real data (uploaded for debugging)
+
+### Python Generation Scripts
+- `/app/backend/generate_mandi_excel_v91.py` - V9.1 generator
+
+---
+
+## Important Notes for Future Agents
+
+1. **DO NOT generate new Excel versions or modify user's files** unless explicitly asked
+2. **Provide exact Excel formulas** for user to paste themselves
+3. **For debugging**: Ask user to upload file, analyze via read-only Python script, tell them what to change manually
+4. User experienced frustration when agent created overly complex versions (V10) and altered business variables without permission
+
+---
+
+## Upcoming Tasks (Priority Order)
+
+1. P0: Continue supporting manual Excel testing (provide formulas on request)
+2. P0: Sub-Type dropdown simplifications (when user provides details)
+3. P1: Build Full-Stack Web App (after Excel prototype is approved)
+4. P2: Multi-user SaaS features
+
+---
+
+*Last Updated: 29 March 2025*
