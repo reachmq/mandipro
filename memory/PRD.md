@@ -11,6 +11,8 @@ Perfected Excel Prototype with two main input sheets (Daily Sales, Cash Book) th
 - Settlement Slips (Aakda)
 - Balance Sheet
 
+**Status:** User actively testing with real data. Month-end closing scheduled for 31st March 2025.
+
 ### Phase 2: Full-Stack Web Application (FUTURE)
 Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 - Multi-user/SaaS capabilities
@@ -18,6 +20,7 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 - Automated month-end profit distribution
 - Journal Voucher (JV) screens
 - Audit trail
+- Advance repayment tracking (see deferred features)
 
 ---
 
@@ -29,7 +32,7 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 
 ### Auto-Generated Sheets
 - Bepaari_Ledger
-- Dukandar_Ledger
+- Dukandar_Ledger (extended to 100 rows)
 - Capital_Loan_Ledger
 - Bepaari_Aakda (Settlement calculations)
 - Balance_Sheet
@@ -42,6 +45,8 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 - Individual party receivables with formula: `Opening + GIVEN - RECEIVED`
 - Real-time ledger generation
 - Balance Sheet with Assets = Liabilities + Capital validation
+- Extended Dukandar_Ledger to support 100 Dukandars
+- Named range DUKANDAR expanded to J3:J150
 
 ---
 
@@ -87,21 +92,43 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 
 ## Issues Fixed (Session: 29 March 2025)
 
-### Issue: ₹200,000 Balance Sheet Discrepancy
-- **Root Cause**: Cell E11 "ADVANCES GIVEN (Net)" was aggregating ALL advances given/received, duplicating amounts already tracked in individual receivable rows (28-33)
+### Issue 1: Balance Sheet ₹200,000 Discrepancy (26 Mar data)
+- **Root Cause**: Cell E11 "ADVANCES GIVEN (Net)" was double-counting advances
 - **Solution**: Cleared contents of cells D11:E11
-- **Status**: RESOLVED - Balance Sheet now tallies
+- **Status**: RESOLVED
+
+### Issue 2: PATTI Missing ₹6,15,150 (28 Mar data)
+- **Root Cause**: 5 new Dukandars (RAMESH KALAL, IMRAN MUMBRA, JAVED THANA, SHAHNAWAZ, PAROLA) added to Masters but Dukandar_Ledger only had 50 rows
+- **Solution**: Added rows 54-58 with proper formulas for these Dukandars
+- **Status**: RESOLVED
+
+### Issue 3: Commission ₹2,100 Extra
+- **Root Cause**: Same 5 Dukandars had discounts not being captured
+- **Solution**: Fixed automatically when Dukandar_Ledger was extended
+- **Status**: RESOLVED
+
+### Issue 4: Future-proofing Dukandar_Ledger
+- **Solution**: Extended Dukandar_Ledger to support 100 Dukandars (rows 4-103), updated TOTAL row to 104, updated Balance Sheet references
+- **Status**: RESOLVED
+
+### Issue 5: Total Liabilities ₹10,000 Difference
+- **Root Cause**: User has manual adjustment for JUNAID AMANAT (₹10,000 weekly repayment from ₹100,000 advance)
+- **Status**: NOTED - Deferred to Phase 2 as "Advance Repayment Feature"
 
 ---
 
-## Pending Items
+## Deferred Features (For Phase 2 Web App)
 
-### User Testing in Progress
-- User is entering real historical data (currently on March 26th)
-- Testing against manual paper accounting records
+### Advance Repayment/Adjustment Feature
+**Business Scenario:** JUNAID has taken ₹100,000 advance (tracked as JUNAID AMANAT with -₹100,000 balance). He repays ₹10,000 weekly which should:
+1. Reduce JUNAID AMANAT from -₹100,000 to -₹90,000
+2. Reduce JUNAID's payable from ₹171,818 to ₹161,818
 
-### Future Simplifications Requested
-- Sub-Type dropdown simplifications in Cash Book (details TBD)
+**Required Features:**
+- Link "Amanat" accounts to main Bepaari accounts
+- Automatic/manual periodic deductions
+- Adjustment entries (JV) that debit advance and credit payable
+- Audit trail for all adjustments
 
 ---
 
@@ -109,7 +136,7 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 
 ### Excel Files
 - `/app/frontend/public/Mandi_Master_V9.1.xlsx` - Base generated version
-- User's local copy with real data (uploaded for debugging)
+- User's local copy with real data (latest uploaded: 29 Mar 2025)
 
 ### Python Generation Scripts
 - `/app/backend/generate_mandi_excel_v91.py` - V9.1 generator
@@ -121,16 +148,29 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 1. **DO NOT generate new Excel versions or modify user's files** unless explicitly asked
 2. **Provide exact Excel formulas** for user to paste themselves
 3. **For debugging**: Ask user to upload file, analyze via read-only Python script, tell them what to change manually
-4. User experienced frustration when agent created overly complex versions (V10) and altered business variables without permission
+4. User experienced frustration when agent created overly complex versions or altered business variables without permission
+5. When adding new Dukandars/Bepaaris, ensure corresponding Ledger rows exist with proper formulas
 
 ---
 
 ## Upcoming Tasks (Priority Order)
 
-1. P0: Continue supporting manual Excel testing (provide formulas on request)
-2. P0: Sub-Type dropdown simplifications (when user provides details)
-3. P1: Build Full-Stack Web App (after Excel prototype is approved)
-4. P2: Multi-user SaaS features
+1. **P0**: Month-end closing on 31st March 2025 - User will test commission distribution, expense deductions, B/F adjustments
+2. **P0**: Support any issues during month-end closing
+3. **P1**: Build Full-Stack Web App (after Excel prototype is fully approved)
+4. **P2**: Multi-user SaaS features
+5. **P2**: Advance repayment tracking feature
+
+---
+
+## Testing Checkpoints
+
+| Date | Test | Status |
+|------|------|--------|
+| 26 Mar 2025 | Daily Sales + Cash Book entry | ✅ Passed |
+| 28 Mar 2025 | New Dukandars + Discounts | ✅ Passed (after fixes) |
+| 29 Mar 2025 | Balance Sheet tally | ✅ Passed |
+| 31 Mar 2025 | Month-end closing | ⏳ Pending |
 
 ---
 
