@@ -573,6 +573,8 @@ const Masters = () => {
   const [form, setForm] = useState({ name: "", opening_balance: "0", commission_percent: "4", partner_type: "CAPITAL", phone: "" });
   const [activeTab, setActiveTab] = useState("bepaaris");
   const [loading, setLoading] = useState(true);
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const fetchData = async () => {
     const [b, d, a, c, s] = await Promise.all([
@@ -600,6 +602,34 @@ const Masters = () => {
     if (!window.confirm("Delete?")) return;
     const endpoints = { bepaaris: "/bepaaris", dukandars: "/dukandars", advance: "/advance-parties", capital: "/capital-partners" };
     await axios.delete(`${API}${endpoints[activeTab]}/${id}`);
+    fetchData();
+  };
+
+  const handleEdit = (item) => {
+    setEditItem(item);
+    setEditForm({
+      name: item.name || "",
+      phone: item.phone || "",
+      opening_balance: item.opening_balance || 0,
+      commission_percent: item.commission_percent || 4,
+      partner_type: item.partner_type || "CAPITAL"
+    });
+  };
+
+  const handleEditSave = async () => {
+    const endpoints = { bepaaris: "/bepaaris", dukandars: "/dukandars", advance: "/advance-parties", capital: "/capital-partners" };
+    const updates = { name: editForm.name };
+    
+    if (activeTab === "bepaaris" || activeTab === "dukandars") {
+      updates.phone = editForm.phone;
+    }
+    if (activeTab === "bepaaris") {
+      updates.commission_percent = parseFloat(editForm.commission_percent);
+    }
+    updates.opening_balance = parseFloat(editForm.opening_balance);
+    
+    await axios.put(`${API}${endpoints[activeTab]}/${editItem.id}`, updates);
+    setEditItem(null);
     fetchData();
   };
 
@@ -674,7 +704,7 @@ const Masters = () => {
                   <th>Opening Balance</th>
                   {activeTab === "bepaaris" && <th>Commission %</th>}
                   {activeTab === "capital" && <th>Type</th>}
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -685,13 +715,51 @@ const Masters = () => {
                     <td>{formatCurrency(item.opening_balance)}</td>
                     {activeTab === "bepaaris" && <td>{item.commission_percent}%</td>}
                     {activeTab === "capital" && <td>{item.partner_type}</td>}
-                    <td><button className="btn-delete" onClick={() => handleDelete(item.id)}>Delete</button></td>
+                    <td>
+                      <button className="btn-edit" onClick={() => handleEdit(item)} data-testid={`edit-${item.id}`}>Edit</button>
+                      <button className="btn-delete" onClick={() => handleDelete(item.id)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="modal-overlay" onClick={() => setEditItem(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit {activeTab.slice(0, -1).charAt(0).toUpperCase() + activeTab.slice(1, -1)}</h3>
+            <div className="edit-form">
+              <label>
+                Name:
+                <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </label>
+              {(activeTab === "bepaaris" || activeTab === "dukandars") && (
+                <label>
+                  Phone:
+                  <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                </label>
+              )}
+              <label>
+                Opening Balance:
+                <input type="number" value={editForm.opening_balance} onChange={(e) => setEditForm({ ...editForm, opening_balance: e.target.value })} />
+              </label>
+              {activeTab === "bepaaris" && (
+                <label>
+                  Commission %:
+                  <input type="number" value={editForm.commission_percent} onChange={(e) => setEditForm({ ...editForm, commission_percent: e.target.value })} />
+                </label>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleEditSave}>Save Changes</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

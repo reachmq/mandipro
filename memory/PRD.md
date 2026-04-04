@@ -95,6 +95,8 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | Dec 2025 | Added phone numbers to Masters |
 | 04 Dec 2025 | Fixed Bepaari Aakda 404 error (route was defined after router registration) |
 | 04 Dec 2025 | Cleaned up test data (fake sale causing ₹1,600 commission) |
+| 04 Dec 2025 | Deleted ALL data for fresh start (user will re-enter from paper records) |
+| 04 Dec 2025 | Added EDIT button/modal for Masters (Bepaaris, Dukandars, etc.) |
 
 ---
 
