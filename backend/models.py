@@ -137,3 +137,27 @@ class MasterCreate(BaseModel):
     flat_rate: Optional[float] = None
     partner_type: Optional[str] = None
     phone: Optional[str] = None
+
+
+# Journal Voucher / Adjustment Entry
+class AdjustmentEntry(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    date: str
+    debit_type: str  # BEPAARI, DUKANDAR, ADVANCE, etc.
+    debit_party_id: str
+    debit_party_name: str
+    credit_type: str  # BEPAARI, DUKANDAR, ADVANCE, etc.
+    credit_party_id: str
+    credit_party_name: str
+    amount: float
+    narration: Optional[str] = None
+
+
+class AdjustmentEntryCreate(BaseModel):
+    date: str
+    debit_type: str
+    debit_party_id: str
+    credit_type: str
+    credit_party_id: str
+    amount: float
+    narration: Optional[str] = None

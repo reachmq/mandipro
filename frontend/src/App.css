@@ -751,3 +751,86 @@ tr:hover {
   padding-top: 20px;
   border-top: 1px solid #e2e8f0;
 }
+
+
+/* Adjustments / JV Styles */
+.adjustment-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.adjustment-form > input[type="date"] {
+  width: 200px;
+}
+
+.jv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+.jv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.jv-section label {
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.debit-section {
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+}
+
+.debit-section label {
+  color: #c53030;
+}
+
+.credit-section {
+  background: #f0fff4;
+  border: 1px solid #9ae6b4;
+}
+
+.credit-section label {
+  color: #276749;
+}
+
+.jv-section select {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 5px;
+}
+
+.badge.debit {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.badge.credit {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.adjustment-form > div:last-of-type {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}

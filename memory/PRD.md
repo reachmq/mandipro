@@ -97,6 +97,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | 04 Dec 2025 | Cleaned up test data (fake sale causing ₹1,600 commission) |
 | 04 Dec 2025 | Deleted ALL data for fresh start (user will re-enter from paper records) |
 | 04 Dec 2025 | Added EDIT button/modal for Masters (Bepaaris, Dukandars, etc.) |
+| 04 Dec 2025 | Added **Adjustments/Journal Voucher (JV)** feature for triangular settlements |
 
 ---
 

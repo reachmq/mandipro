@@ -16,6 +16,7 @@ const Sidebar = () => {
     { path: "/", label: "Dashboard", icon: "📊" },
     { path: "/daily-sales", label: "Daily Sales", icon: "🐐" },
     { path: "/cash-book", label: "Cash Book", icon: "💰" },
+    { path: "/adjustments", label: "Adjustments (JV)", icon: "🔄" },
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
     { path: "/dukandar-ledger", label: "Dukandar Ledger", icon: "📗" },
     { path: "/balance-sheet", label: "Balance Sheet", icon: "📑" },
@@ -278,6 +279,149 @@ const CashBook = () => {
   );
 };
 
+// ============== ADJUSTMENTS / JOURNAL VOUCHER ==============
+const Adjustments = () => {
+  const [adjustments, setAdjustments] = useState([]);
+  const [bepaaris, setBeparis] = useState([]);
+  const [dukandars, setDukandars] = useState([]);
+  const [form, setForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    debit_type: "",
+    debit_party_id: "",
+    credit_type: "",
+    credit_party_id: "",
+    amount: "",
+    narration: ""
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const [adjRes, bepaariRes, dukandarRes] = await Promise.all([
+        axios.get(`${API}/adjustments`),
+        axios.get(`${API}/bepaaris`),
+        axios.get(`${API}/dukandars`)
+      ]);
+      setAdjustments(adjRes.data);
+      setBeparis(bepaariRes.data);
+      setDukandars(dukandarRes.data);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const getParties = (type) => {
+    if (type === "BEPAARI") return bepaaris;
+    if (type === "DUKANDAR") return dukandars;
+    return [];
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.debit_type || !form.debit_party_id || !form.credit_type || !form.credit_party_id) {
+      alert("Please select both Debit and Credit parties");
+      return;
+    }
+    await axios.post(`${API}/adjustments`, {
+      ...form,
+      amount: parseFloat(form.amount)
+    });
+    setForm({
+      ...form,
+      debit_type: "",
+      debit_party_id: "",
+      credit_type: "",
+      credit_party_id: "",
+      amount: "",
+      narration: ""
+    });
+    fetchData();
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Delete this adjustment?")) {
+      await axios.delete(`${API}/adjustments/${id}`);
+      fetchData();
+    }
+  };
+
+  if (loading) return <div className="loading">Loading...</div>;
+
+  return (
+    <div className="page">
+      <h2>Adjustments / Journal Voucher</h2>
+      <p className="hint">Record triangular settlements where one party pays another on your behalf (no cash moves through you)</p>
+
+      <form className="entry-form adjustment-form" onSubmit={handleSubmit}>
+        <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        
+        <div className="jv-row">
+          <div className="jv-section debit-section">
+            <label>DEBIT (Reduces our Payable)</label>
+            <select value={form.debit_type} onChange={(e) => setForm({ ...form, debit_type: e.target.value, debit_party_id: "" })} required>
+              <option value="">Select Type</option>
+              <option value="BEPAARI">Bepaari</option>
+              <option value="DUKANDAR">Dukandar</option>
+            </select>
+            <select value={form.debit_party_id} onChange={(e) => setForm({ ...form, debit_party_id: e.target.value })} required disabled={!form.debit_type}>
+              <option value="">Select Party</option>
+              {getParties(form.debit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div className="jv-section credit-section">
+            <label>CREDIT (Reduces their Receivable)</label>
+            <select value={form.credit_type} onChange={(e) => setForm({ ...form, credit_type: e.target.value, credit_party_id: "" })} required>
+              <option value="">Select Type</option>
+              <option value="BEPAARI">Bepaari</option>
+              <option value="DUKANDAR">Dukandar</option>
+            </select>
+            <select value={form.credit_party_id} onChange={(e) => setForm({ ...form, credit_party_id: e.target.value })} required disabled={!form.credit_type}>
+              <option value="">Select Party</option>
+              {getParties(form.credit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <input type="number" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required min="1" />
+        <input type="text" placeholder="Narration (e.g., Jagdish paid Bepaari directly)" value={form.narration} onChange={(e) => setForm({ ...form, narration: e.target.value })} style={{minWidth: '300px'}} />
+        <button type="submit" className="btn-primary">Add Adjustment</button>
+      </form>
+
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Debit (Payable ↓)</th>
+              <th>Credit (Receivable ↓)</th>
+              <th>Amount</th>
+              <th>Narration</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {adjustments.map((a) => (
+              <tr key={a.id}>
+                <td>{a.date}</td>
+                <td><span className="badge debit">{a.debit_type}</span> {a.debit_party_name}</td>
+                <td><span className="badge credit">{a.credit_type}</span> {a.credit_party_name}</td>
+                <td>{formatCurrency(a.amount)}</td>
+                <td>{a.narration || "-"}</td>
+                <td><button className="btn-delete" onClick={() => handleDelete(a.id)}>X</button></td>
+              </tr>
+            ))}
+            {adjustments.length === 0 && (
+              <tr><td colSpan="6" style={{textAlign: 'center', color: '#888'}}>No adjustments recorded yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ============== PARTY STATEMENT (NEW!) ==============
 const PartyStatement = () => {
   const [bepaaris, setBeparis] = useState([]);
@@ -405,8 +549,9 @@ const BepariLedger = () => {
 
   const totals = ledger.reduce((acc, b) => ({
     gross: acc.gross + b.gross_sales, qty: acc.qty + b.quantity, comm: acc.comm + b.commission,
-    kk: acc.kk + b.kk, jb: acc.jb + b.jb, ded: acc.ded + b.total_deductions, pay: acc.pay + b.payments, bal: acc.bal + b.balance
-  }), { gross: 0, qty: 0, comm: 0, kk: 0, jb: 0, ded: 0, pay: 0, bal: 0 });
+    kk: acc.kk + b.kk, jb: acc.jb + b.jb, ded: acc.ded + b.total_deductions, 
+    pay: acc.pay + b.payments, adj: acc.adj + (b.adjustments || 0), bal: acc.bal + b.balance
+  }), { gross: 0, qty: 0, comm: 0, kk: 0, jb: 0, ded: 0, pay: 0, adj: 0, bal: 0 });
 
   return (
     <div className="page">
@@ -418,20 +563,22 @@ const BepariLedger = () => {
       </div>
       <div className="table-container">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
             {ledger.filter(b => b.gross_sales > 0 || b.opening > 0 || b.balance !== 0).map((b) => (
               <tr key={b.id}>
                 <td><strong>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
                 <td>{b.quantity}</td><td>{formatCurrency(b.commission)}</td><td>{formatCurrency(b.kk)}</td><td>{formatCurrency(b.jb)}</td>
                 <td>{formatCurrency(b.total_deductions)}</td><td>{formatCurrency(b.payments)}</td>
+                <td className="adjustment-col">{b.adjustments > 0 ? formatCurrency(b.adjustments) : "-"}</td>
                 <td className={b.balance >= 0 ? "positive" : "negative"}>{formatCurrency(b.balance)}</td>
               </tr>
             ))}
             <tr className="total-row">
               <td><strong>TOTAL</strong></td><td></td><td>-</td><td><strong>{formatCurrency(totals.gross)}</strong></td><td><strong>{totals.qty}</strong></td>
               <td><strong>{formatCurrency(totals.comm)}</strong></td><td><strong>{formatCurrency(totals.kk)}</strong></td><td><strong>{formatCurrency(totals.jb)}</strong></td>
-              <td><strong>{formatCurrency(totals.ded)}</strong></td><td><strong>{formatCurrency(totals.pay)}</strong></td><td><strong>{formatCurrency(totals.bal)}</strong></td>
+              <td><strong>{formatCurrency(totals.ded)}</strong></td><td><strong>{formatCurrency(totals.pay)}</strong></td>
+              <td><strong>{totals.adj > 0 ? formatCurrency(totals.adj) : "-"}</strong></td><td><strong>{formatCurrency(totals.bal)}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -458,8 +605,9 @@ const DukandarLedger = () => {
   if (loading) return <div className="loading">Loading...</div>;
 
   const totals = ledger.reduce((acc, d) => ({
-    purchases: acc.purchases + d.purchases, discounts: acc.discounts + d.discounts, receipts: acc.receipts + d.receipts, balance: acc.balance + d.balance
-  }), { purchases: 0, discounts: 0, receipts: 0, balance: 0 });
+    purchases: acc.purchases + d.purchases, discounts: acc.discounts + d.discounts, 
+    receipts: acc.receipts + d.receipts, adj: acc.adj + (d.adjustments || 0), balance: acc.balance + d.balance
+  }), { purchases: 0, discounts: 0, receipts: 0, adj: 0, balance: 0 });
 
   return (
     <div className="page">
@@ -471,18 +619,20 @@ const DukandarLedger = () => {
       </div>
       <div className="table-container">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Receivable</th><th>Receipts</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Receivable</th><th>Receipts</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
             {ledger.filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).map((d) => (
               <tr key={d.id}>
                 <td><strong>{d.name}</strong></td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
+                <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>
                 <td className={d.balance >= 0 ? "positive" : "negative"}>{formatCurrency(d.balance)}</td>
               </tr>
             ))}
             <tr className="total-row">
               <td><strong>TOTAL</strong></td><td></td><td>-</td><td><strong>{formatCurrency(totals.purchases)}</strong></td><td><strong>{formatCurrency(totals.discounts)}</strong></td>
-              <td>-</td><td><strong>{formatCurrency(totals.receipts)}</strong></td><td><strong>{formatCurrency(totals.balance)}</strong></td>
+              <td>-</td><td><strong>{formatCurrency(totals.receipts)}</strong></td>
+              <td><strong>{totals.adj > 0 ? formatCurrency(totals.adj) : "-"}</strong></td><td><strong>{formatCurrency(totals.balance)}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -776,6 +926,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/daily-sales" element={<DailySales />} />
             <Route path="/cash-book" element={<CashBook />} />
+            <Route path="/adjustments" element={<Adjustments />} />
             <Route path="/bepaari-ledger" element={<BepariLedger />} />
             <Route path="/dukandar-ledger" element={<DukandarLedger />} />
             <Route path="/balance-sheet" element={<BalanceSheet />} />

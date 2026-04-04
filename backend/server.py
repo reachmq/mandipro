@@ -10,7 +10,8 @@ from typing import List, Optional
 from datetime import datetime
 from models import (
     Bepaari, Dukandar, AdvanceParty, CapitalPartner, Settings,
-    DailySale, CashBookEntry, DailySaleCreate, CashBookEntryCreate, MasterCreate
+    DailySale, CashBookEntry, DailySaleCreate, CashBookEntryCreate, MasterCreate,
+    AdjustmentEntry, AdjustmentEntryCreate
 )
 import uuid
 import io
@@ -419,12 +420,15 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
     
     sales_query = {}
     cash_query = {"type": "BEPAARI"}
+    adj_query = {}
     if as_on_date:
         sales_query["date"] = {"$lte": as_on_date}
         cash_query["date"] = {"$lte": as_on_date}
+        adj_query["date"] = {"$lte": as_on_date}
     
     sales = await db.daily_sales.find(sales_query).to_list(5000)
     cash_entries = await db.cash_book.find(cash_query).to_list(5000)
+    adjustments = await db.adjustments.find(adj_query).to_list(5000)
     settings = await get_settings()
     
     ledger = []
@@ -449,9 +453,13 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         cash_adv = sum(c["amount"] for c in b_cash if c.get("sub_type") == "CASH_ADV")
         payments = sum(c["amount"] for c in b_cash if c.get("sub_type") == "PAYMENT")
         
+        # Adjustments: Debit to Bepaari = reduces our payable (like a payment received on our behalf)
+        adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
+                       if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"])
+        
         total_ded = commission + kk + jb + motor + bhussa + gawali + cash_adv
         net_payable = b.get("opening_balance", 0) + gross - total_ded
-        balance = net_payable - payments
+        balance = net_payable - payments - adj_debit
         
         ledger.append({
             "id": b["id"],
@@ -470,6 +478,7 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
             "total_deductions": total_ded,
             "net_payable": net_payable,
             "payments": payments,
+            "adjustments": adj_debit,
             "balance": balance
         })
     
@@ -483,12 +492,15 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
     
     sales_query = {}
     cash_query = {"type": "DUKANDAR"}
+    adj_query = {}
     if as_on_date:
         sales_query["date"] = {"$lte": as_on_date}
         cash_query["date"] = {"$lte": as_on_date}
+        adj_query["date"] = {"$lte": as_on_date}
     
     sales = await db.daily_sales.find(sales_query).to_list(5000)
     cash_entries = await db.cash_book.find(cash_query).to_list(5000)
+    adjustments = await db.adjustments.find(adj_query).to_list(5000)
     
     ledger = []
     for d in serialize_docs(dukandars):
@@ -499,8 +511,12 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
         
+        # Adjustments: Credit to Dukandar = reduces their receivable (they paid someone on our behalf)
+        adj_credit = sum(a["amount"] for a in serialize_docs(adjustments) 
+                        if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"])
+        
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
-        balance = net_receivable - receipts
+        balance = net_receivable - receipts - adj_credit
         
         ledger.append({
             "id": d["id"],
@@ -511,6 +527,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "discounts": discounts,
             "net_receivable": net_receivable,
             "receipts": receipts,
+            "adjustments": adj_credit,
             "balance": balance
         })
     
@@ -637,6 +654,74 @@ async def get_dashboard():
             "balance_diff": balance_sheet["difference"]
         }
     }
+
+
+# ============== JOURNAL VOUCHER / ADJUSTMENTS ==============
+@api_router.get("/adjustments")
+async def get_adjustments(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Get all adjustment/JV entries"""
+    query = {}
+    if from_date and to_date:
+        query["date"] = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        query["date"] = {"$gte": from_date}
+    elif to_date:
+        query["date"] = {"$lte": to_date}
+    
+    adjustments = await db.adjustments.find(query).sort("date", -1).to_list(1000)
+    return serialize_docs(adjustments)
+
+
+@api_router.post("/adjustments")
+async def create_adjustment(data: AdjustmentEntryCreate):
+    """Create a new adjustment/JV entry"""
+    # Get party names
+    debit_party_name = None
+    credit_party_name = None
+    
+    # Find debit party
+    for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+        party = await db[coll].find_one({"id": data.debit_party_id})
+        if party:
+            debit_party_name = party.get("name")
+            break
+    
+    # Find credit party
+    for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+        party = await db[coll].find_one({"id": data.credit_party_id})
+        if party:
+            credit_party_name = party.get("name")
+            break
+    
+    if not debit_party_name or not credit_party_name:
+        raise HTTPException(status_code=400, detail="Invalid party ID")
+    
+    adjustment = AdjustmentEntry(
+        date=data.date,
+        debit_type=data.debit_type,
+        debit_party_id=data.debit_party_id,
+        debit_party_name=debit_party_name,
+        credit_type=data.credit_type,
+        credit_party_id=data.credit_party_id,
+        credit_party_name=credit_party_name,
+        amount=data.amount,
+        narration=data.narration
+    )
+    
+    doc = adjustment.model_dump()
+    doc["created_at"] = datetime.utcnow().isoformat()
+    await db.adjustments.insert_one(doc)
+    return serialize_doc(doc)
+
+
+@api_router.delete("/adjustments/{adjustment_id}")
+async def delete_adjustment(adjustment_id: str):
+    """Delete an adjustment entry"""
+    await db.adjustments.delete_one({"id": adjustment_id})
+    return {"status": "deleted"}
 
 
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
