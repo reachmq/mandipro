@@ -639,14 +639,6 @@ async def get_dashboard():
     }
 
 
-app.include_router(api_router)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
-
-
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
 @api_router.get("/bepaari-aakda")
 async def get_bepaari_aakda(date: str):
@@ -764,3 +756,12 @@ async def get_single_bepaari_aakda(bepaari_id: str, date: str):
         if a["bepaari_id"] == bepaari_id:
             return a
     raise HTTPException(status_code=404, detail="No transactions found for this Bepaari on this date")
+
+
+# ============== REGISTER ROUTER & MIDDLEWARE ==============
+app.include_router(api_router)
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()

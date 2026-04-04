@@ -5,48 +5,52 @@ Build a software solution for managing accounting in a "Mandi" (livestock wholes
 
 ## Development Phases
 
-### Phase 1: Excel Prototype (CURRENT - IN PROGRESS)
-Perfected Excel Prototype with two main input sheets (Daily Sales, Cash Book) that auto-calculates:
-- Bepaari/Dukandar Ledgers
-- Settlement Slips (Aakda)
-- Balance Sheet
+### Phase 1: Excel Prototype (COMPLETED)
+Perfected Excel Prototype (V9.1) with two main input sheets (Daily Sales, Cash Book) that auto-calculates Bepaari/Dukandar Ledgers, Settlement Slips (Aakda), and Balance Sheet.
 
-**Status:** User actively testing with real data. Month-end closing scheduled for 31st March 2025.
+### Phase 2: Full-Stack Web Application (CURRENT - IN PROGRESS)
+Migrated Excel logic to React + FastAPI + MongoDB application.
 
-### Phase 2: Full-Stack Web Application (FUTURE)
-Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
-- Multi-user/SaaS capabilities
-- Date-wise reporting
-- Automated month-end profit distribution
-- Journal Voucher (JV) screens
-- Audit trail
-- Advance repayment tracking (see deferred features)
+**Completed Features:**
+- Dashboard with key metrics (Cash, Bank, Patti, Bepaari Payable, Commission)
+- Daily Sales entry with Bepaari/Dukandar selection, filters
+- Cash Book with Type-dependent Sub-Type dropdowns
+- Bepaari Ledger with full deduction calculations
+- Dukandar Ledger (Patti)
+- Balance Sheet (Assets vs Liabilities)
+- Party Statement with date filters & CSV export
+- Masters management (Bepaaris, Dukandars, Advance Parties, Capital Partners)
+- Soft delete functionality for Masters
+- Phone number fields for Bepaaris/Dukandars
+- **Bepaari Aakda (Settlement Slip)** - Daily settlement calculations per Bepaari with print functionality (FIXED: 04 Dec 2025)
 
 ---
 
-## Current Excel Version: V9.1
+## Current Architecture
 
-### Input Sheets
-1. **Daily_Sales** - Records all goat sales (Bepaari → Dukandar)
-2. **Cash_Book** - All cash/bank transactions with Type/Sub-Type dropdowns
+### Tech Stack
+- **Frontend**: React (create-react-app)
+- **Backend**: FastAPI (Python)
+- **Database**: MongoDB (Motor async driver)
+- **Styling**: Custom CSS with card-based dashboard
 
-### Auto-Generated Sheets
-- Bepaari_Ledger
-- Dukandar_Ledger (extended to 100 rows)
-- Capital_Loan_Ledger
-- Bepaari_Aakda (Settlement calculations)
-- Balance_Sheet
-- Commission_Summary
+### Key Files
+- `/app/backend/server.py` - All API routes
+- `/app/backend/models.py` - Pydantic models
+- `/app/frontend/src/App.js` - Main React app with routing
+- `/app/frontend/src/BepariAakda.js` - Settlement slip component
+- `/app/frontend/src/App.css` - Styles
 
-### Key Features Implemented
-- B/F (Brought Forward) opening balances in Masters sheet
-- Flat commission rate (per goat) with override capability
-- Type-specific Sub-Type dropdowns using INDIRECT
-- Individual party receivables with formula: `Opening + GIVEN - RECEIVED`
-- Real-time ledger generation
-- Balance Sheet with Assets = Liabilities + Capital validation
-- Extended Dukandar_Ledger to support 100 Dukandars
-- Named range DUKANDAR expanded to J3:J150
+### API Endpoints (all prefixed with /api)
+- GET/POST/DELETE `/bepaaris`, `/dukandars`, `/advance-parties`, `/capital-partners`
+- GET/PUT `/settings`
+- GET/POST/DELETE `/daily-sales`
+- GET/POST/DELETE `/cash-book`
+- GET `/bepaari-ledger`, `/dukandar-ledger`
+- GET `/balance-sheet`
+- GET `/bepaari-aakda?date=YYYY-MM-DD` - Settlement slips
+- GET `/party-statement/{party_type}/{party_id}`
+- GET `/export/party-statement/{party_type}/{party_id}`
 
 ---
 
@@ -57,121 +61,70 @@ Migrate finalized Excel logic to React + FastAPI + MongoDB application with:
 - **Dukandars**: Buyers who purchase goats (they owe us)
 - **Advance Parties**: External individuals we give/receive advances from
 
-### Deductions from Bepaari
-- Commission (4% or flat per-piece)
-- KK (Fixed ₹100 per Bepaari)
-- JB (₹10 per goat)
-- Motor (transport)
-- Bhussa (fodder)
-- Gawali (labor)
+### Deductions from Bepaari (in Aakda)
+- Commission (4% or flat per-piece override)
+- KK (Fixed per Bepaari)
+- JB (per goat rate)
+- Motor, Bhussa, Gawali (from Cash Book)
 - Cash Advance
 
 ### Balance Sheet Structure
-**Liabilities (We Owe):**
-- Capital (per investor)
-- Loans
-- Amanat
+**Liabilities:**
+- Capital, Loans, Amanat
 - Bepaari Payables
-- Dukandar Advances (if overpaid)
-- JB Collected
-- KK Collected
-- Commission Earned
+- Dukandar Advances
+- JB, KK, Commission totals
 - Zakat Payable
 
-**Assets (We Have/Owed to Us):**
-- Cash Balance
-- Bank Balance
+**Assets:**
+- Cash & Bank Balance
 - Patti (Dukandar Receivable)
-- Bepaari Advances (if overpaid)
-- Mandi Expenses
-- BF Discount
-- MHN Personal
-- Individual Receivables (Salim, Mudassir, KMN, Santosh, Shakil, Ayaan)
+- Bepaari Advances
+- Mandi Expenses, BF Discount, MHN Personal
+- Advance Receivables (individual)
 
 ---
 
-## Issues Fixed (Session: 29 March 2025)
+## Completed Work Log
 
-### Issue 1: Balance Sheet ₹200,000 Discrepancy (26 Mar data)
-- **Root Cause**: Cell E11 "ADVANCES GIVEN (Net)" was double-counting advances
-- **Solution**: Cleared contents of cells D11:E11
-- **Status**: RESOLVED
-
-### Issue 2: PATTI Missing ₹6,15,150 (28 Mar data)
-- **Root Cause**: 5 new Dukandars (RAMESH KALAL, IMRAN MUMBRA, JAVED THANA, SHAHNAWAZ, PAROLA) added to Masters but Dukandar_Ledger only had 50 rows
-- **Solution**: Added rows 54-58 with proper formulas for these Dukandars
-- **Status**: RESOLVED
-
-### Issue 3: Commission ₹2,100 Extra
-- **Root Cause**: Same 5 Dukandars had discounts not being captured
-- **Solution**: Fixed automatically when Dukandar_Ledger was extended
-- **Status**: RESOLVED
-
-### Issue 4: Future-proofing Dukandar_Ledger
-- **Solution**: Extended Dukandar_Ledger to support 100 Dukandars (rows 4-103), updated TOTAL row to 104, updated Balance Sheet references
-- **Status**: RESOLVED
-
-### Issue 5: Total Liabilities ₹10,000 Difference
-- **Root Cause**: User has manual adjustment for JUNAID AMANAT (₹10,000 weekly repayment from ₹100,000 advance)
-- **Status**: NOTED - Deferred to Phase 2 as "Advance Repayment Feature"
-
----
-
-## Deferred Features (For Phase 2 Web App)
-
-### Advance Repayment/Adjustment Feature
-**Business Scenario:** JUNAID has taken ₹100,000 advance (tracked as JUNAID AMANAT with -₹100,000 balance). He repays ₹10,000 weekly which should:
-1. Reduce JUNAID AMANAT from -₹100,000 to -₹90,000
-2. Reduce JUNAID's payable from ₹171,818 to ₹161,818
-
-**Required Features:**
-- Link "Amanat" accounts to main Bepaari accounts
-- Automatic/manual periodic deductions
-- Adjustment entries (JV) that debit advance and credit payable
-- Audit trail for all adjustments
-
----
-
-## Files Reference
-
-### Excel Files
-- `/app/frontend/public/Mandi_Master_V9.1.xlsx` - Base generated version
-- User's local copy with real data (latest uploaded: 29 Mar 2025)
-
-### Python Generation Scripts
-- `/app/backend/generate_mandi_excel_v91.py` - V9.1 generator
-
----
-
-## Important Notes for Future Agents
-
-1. **DO NOT generate new Excel versions or modify user's files** unless explicitly asked
-2. **Provide exact Excel formulas** for user to paste themselves
-3. **For debugging**: Ask user to upload file, analyze via read-only Python script, tell them what to change manually
-4. User experienced frustration when agent created overly complex versions or altered business variables without permission
-5. When adding new Dukandars/Bepaaris, ensure corresponding Ledger rows exist with proper formulas
+| Date | Work Done |
+|------|-----------|
+| Dec 2025 | Migrated from Excel to full-stack web app |
+| Dec 2025 | Built Dashboard, Daily Sales, Cash Book, Ledgers, Balance Sheet |
+| Dec 2025 | Added Party Statement with CSV export |
+| Dec 2025 | Added phone numbers to Masters |
+| 04 Dec 2025 | Fixed Bepaari Aakda 404 error (route was defined after router registration) |
+| 04 Dec 2025 | Cleaned up test data (fake sale causing ₹1,600 commission) |
 
 ---
 
 ## Upcoming Tasks (Priority Order)
 
-1. **P0**: Month-end closing on 31st March 2025 - User will test commission distribution, expense deductions, B/F adjustments
-2. **P0**: Support any issues during month-end closing
-3. **P1**: Build Full-Stack Web App (after Excel prototype is fully approved)
-4. **P2**: Multi-user SaaS features
-5. **P2**: Advance repayment tracking feature
+### P1 - High Priority
+1. **Month-end Closing Workflow**
+   - Calculate distributable profit (Commission - Expenses - Provisions)
+   - Adjust balances and carry forward to next month
+
+2. **Advance Repayment / JV Tracking**
+   - Handle "Junaid Amanat" scenario (₹10K weekly repayment from sales)
+   - Link Amanat accounts to main Bepaari accounts
+
+### P2 - Future/Backlog
+1. WhatsApp/SMS Integration for outstanding reports
+2. Multi-user SaaS features (Role-based access)
+3. Multiple Mandi management
+4. Audit trail for all transactions
 
 ---
 
-## Testing Checkpoints
+## Important Notes for Future Agents
 
-| Date | Test | Status |
-|------|------|--------|
-| 26 Mar 2025 | Daily Sales + Cash Book entry | ✅ Passed |
-| 28 Mar 2025 | New Dukandars + Discounts | ✅ Passed (after fixes) |
-| 29 Mar 2025 | Balance Sheet tally | ✅ Passed |
-| 31 Mar 2025 | Month-end closing | ⏳ Pending |
+1. All backend routes MUST be defined BEFORE `app.include_router(api_router)` or they won't be registered
+2. Always exclude `_id` from MongoDB responses using `serialize_doc()` helper
+3. User has REAL DATA in the database - do not add test records without cleaning up
+4. The Balance Sheet has a ₹5,01,238 difference due to opening balances from user's paper records
+5. Settings (commission rate, KK fixed, JB rate) are stored in MongoDB `settings` collection
 
 ---
 
-*Last Updated: 29 March 2025*
+*Last Updated: 04 December 2025*
