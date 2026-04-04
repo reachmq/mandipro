@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Format currency
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 };
@@ -106,11 +105,13 @@ const DailySales = () => {
   const [dukandars, setDukandars] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0" });
   const [loading, setLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState("");
 
   const fetchData = async () => {
     try {
+      const url = filterDate ? `${API}/daily-sales?date=${filterDate}` : `${API}/daily-sales`;
       const [salesRes, bepaariRes, dukandarRes] = await Promise.all([
-        axios.get(`${API}/daily-sales`),
+        axios.get(url),
         axios.get(`${API}/bepaaris`),
         axios.get(`${API}/dukandars`)
       ]);
@@ -124,7 +125,7 @@ const DailySales = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [filterDate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -171,6 +172,12 @@ const DailySales = () => {
         <button type="submit" className="btn-primary" data-testid="add-sale-btn">Add Sale</button>
       </form>
 
+      <div className="filter-bar">
+        <label>Filter by Date:</label>
+        <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+        {filterDate && <button className="btn-clear" onClick={() => setFilterDate("")}>Clear Filter</button>}
+      </div>
+
       <div className="table-container">
         <table data-testid="sales-table">
           <thead>
@@ -213,6 +220,7 @@ const CashBook = () => {
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", mode: "CASH", particulars: "" });
   const [loading, setLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState("");
 
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
   const subTypes = {
@@ -229,8 +237,9 @@ const CashBook = () => {
 
   const fetchData = async () => {
     try {
+      const url = filterDate ? `${API}/cash-book?date=${filterDate}` : `${API}/cash-book`;
       const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes] = await Promise.all([
-        axios.get(`${API}/cash-book`),
+        axios.get(url),
         axios.get(`${API}/bepaaris`),
         axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`),
@@ -251,7 +260,7 @@ const CashBook = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [filterDate]);
 
   const filteredParties = parties.filter(p => {
     if (form.type === "BEPAARI") return p.ptype === "BEPAARI";
@@ -264,10 +273,7 @@ const CashBook = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API}/cash-book`, {
-        ...form,
-        amount: parseFloat(form.amount)
-      });
+      await axios.post(`${API}/cash-book`, { ...form, amount: parseFloat(form.amount) });
       setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", particulars: "" });
       fetchData();
     } catch (err) {
@@ -309,6 +315,12 @@ const CashBook = () => {
         <input type="text" placeholder="Particulars (Optional)" value={form.particulars} onChange={(e) => setForm({ ...form, particulars: e.target.value })} />
         <button type="submit" className="btn-primary" data-testid="add-entry-btn">Add Entry</button>
       </form>
+
+      <div className="filter-bar">
+        <label>Filter by Date:</label>
+        <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+        {filterDate && <button className="btn-clear" onClick={() => setFilterDate("")}>Clear Filter</button>}
+      </div>
 
       <div className="table-container">
         <table data-testid="cash-book-table">
@@ -607,12 +619,7 @@ const Masters = () => {
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    const endpoints = {
-      bepaaris: "/bepaaris",
-      dukandars: "/dukandars",
-      advance: "/advance-parties",
-      capital: "/capital-partners"
-    };
+    const endpoints = { bepaaris: "/bepaaris", dukandars: "/dukandars", advance: "/advance-parties", capital: "/capital-partners" };
     try {
       await axios.post(`${API}${endpoints[activeTab]}`, {
         name: form.name,
@@ -627,6 +634,17 @@ const Masters = () => {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this entry?")) return;
+    const endpoints = { bepaaris: "/bepaaris", dukandars: "/dukandars", advance: "/advance-parties", capital: "/capital-partners" };
+    try {
+      await axios.delete(`${API}${endpoints[activeTab]}/${id}`);
+      fetchData();
+    } catch (err) {
+      alert("Error deleting: " + err.message);
+    }
+  };
+
   const handleSettingsUpdate = async () => {
     try {
       await axios.put(`${API}/settings`, settings);
@@ -637,6 +655,16 @@ const Masters = () => {
   };
 
   if (loading) return <div className="loading">Loading...</div>;
+
+  const getActiveData = () => {
+    switch (activeTab) {
+      case "bepaaris": return bepaaris;
+      case "dukandars": return dukandars;
+      case "advance": return advParties;
+      case "capital": return capPartners;
+      default: return [];
+    }
+  };
 
   return (
     <div className="page" data-testid="masters-page">
@@ -693,15 +721,19 @@ const Masters = () => {
                   <th>Opening Balance</th>
                   {activeTab === "bepaaris" && <th>Commission %</th>}
                   {activeTab === "capital" && <th>Type</th>}
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {(activeTab === "bepaaris" ? bepaaris : activeTab === "dukandars" ? dukandars : activeTab === "advance" ? advParties : capPartners).map((item) => (
+                {getActiveData().map((item) => (
                   <tr key={item.id}>
                     <td>{item.name}</td>
                     <td>{formatCurrency(item.opening_balance)}</td>
                     {activeTab === "bepaaris" && <td>{item.commission_percent}%</td>}
                     {activeTab === "capital" && <td>{item.partner_type}</td>}
+                    <td>
+                      <button className="btn-delete" onClick={() => handleDelete(item.id)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

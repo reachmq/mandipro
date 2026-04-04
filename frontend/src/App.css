@@ -400,3 +400,39 @@ tr:hover {
     width: 100%;
   }
 }
+
+/* Filter Bar */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #edf2f7;
+  border-radius: 8px;
+}
+
+.filter-bar label {
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.filter-bar input {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.btn-clear {
+  background: #718096;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-clear:hover {
+  background: #4a5568;
+}
