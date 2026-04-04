@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
+import BepariAakda from "./BepariAakda";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -18,6 +19,7 @@ const Sidebar = () => {
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
     { path: "/dukandar-ledger", label: "Dukandar Ledger", icon: "📗" },
     { path: "/balance-sheet", label: "Balance Sheet", icon: "📑" },
+    { path: "/bepaari-aakda", label: "Bepaari Aakda", icon: "🧾" },
     { path: "/party-statement", label: "Party Statement", icon: "📄" },
     { path: "/masters", label: "Masters", icon: "⚙️" },
   ];
@@ -709,6 +711,7 @@ function App() {
             <Route path="/bepaari-ledger" element={<BepariLedger />} />
             <Route path="/dukandar-ledger" element={<DukandarLedger />} />
             <Route path="/balance-sheet" element={<BalanceSheet />} />
+            <Route path="/bepaari-aakda" element={<BepariAakda />} />
             <Route path="/party-statement" element={<PartyStatement />} />
             <Route path="/masters" element={<Masters />} />
           </Routes>

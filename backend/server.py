@@ -645,3 +645,122 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+# ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
+@api_router.get("/bepaari-aakda")
+async def get_bepaari_aakda(date: str):
+    """Get Aakda (settlement slip) for all Bepaaris for a specific market day"""
+    
+    bepaaris = serialize_docs(await db.bepaaris.find({"is_active": True}).to_list(500))
+    sales = serialize_docs(await db.daily_sales.find({"date": date}).to_list(1000))
+    cash_entries = serialize_docs(await db.cash_book.find({"date": date, "type": "BEPAARI"}).to_list(1000))
+    settings = await get_settings()
+    
+    # Get previous balance (all transactions before this date)
+    prev_sales = serialize_docs(await db.daily_sales.find({"date": {"$lt": date}}).to_list(5000))
+    prev_cash = serialize_docs(await db.cash_book.find({"date": {"$lt": date}, "type": "BEPAARI"}).to_list(5000))
+    
+    aakda_list = []
+    
+    for b in bepaaris:
+        # Today's sales
+        b_sales_today = [s for s in sales if s["bepaari_id"] == b["id"]]
+        b_cash_today = [c for c in cash_entries if c.get("party_id") == b["id"]]
+        
+        if not b_sales_today and not b_cash_today:
+            continue  # Skip Bepaaris with no activity today
+        
+        # Previous data for opening balance calculation
+        b_prev_sales = [s for s in prev_sales if s["bepaari_id"] == b["id"]]
+        b_prev_cash = [c for c in prev_cash if c.get("party_id") == b["id"]]
+        
+        # Calculate previous balance (opening for today)
+        prev_gross = sum(s["gross_amount"] for s in b_prev_sales)
+        prev_qty = sum(s["quantity"] for s in b_prev_sales)
+        
+        if b.get("flat_rate_per_goat"):
+            prev_comm = b["flat_rate_per_goat"] * prev_qty
+        else:
+            prev_comm = prev_gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
+        
+        prev_kk = settings.get("kk_fixed", 100) if prev_qty > 0 else 0
+        prev_jb = prev_qty * settings.get("jb_rate", 10)
+        prev_motor = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "MOTOR")
+        prev_bhussa = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "BHUSSA")
+        prev_gawali = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "GAWALI")
+        prev_cash_adv = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "CASH_ADV")
+        prev_payments = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "PAYMENT")
+        
+        prev_total_ded = prev_comm + prev_kk + prev_jb + prev_motor + prev_bhussa + prev_gawali + prev_cash_adv
+        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments
+        
+        # Today's calculations
+        today_gross = sum(s["gross_amount"] for s in b_sales_today)
+        today_qty = sum(s["quantity"] for s in b_sales_today)
+        
+        if b.get("flat_rate_per_goat"):
+            today_comm = b["flat_rate_per_goat"] * today_qty
+        else:
+            today_comm = today_gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
+        
+        today_kk = settings.get("kk_fixed", 100) if today_qty > 0 else 0
+        today_jb = today_qty * settings.get("jb_rate", 10)
+        today_motor = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "MOTOR")
+        today_bhussa = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "BHUSSA")
+        today_gawali = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "GAWALI")
+        today_cash_adv = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "CASH_ADV")
+        today_payments = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "PAYMENT")
+        
+        today_total_ded = today_comm + today_kk + today_jb + today_motor + today_bhussa + today_gawali + today_cash_adv
+        today_net = today_gross - today_total_ded
+        closing_balance = opening_balance + today_net - today_payments
+        
+        # Sales breakdown by Dukandar
+        sales_detail = []
+        for s in b_sales_today:
+            sales_detail.append({
+                "dukandar": s["dukandar_name"],
+                "quantity": s["quantity"],
+                "rate": s["rate"],
+                "amount": s["gross_amount"],
+                "discount": s["discount"]
+            })
+        
+        aakda_list.append({
+            "bepaari_id": b["id"],
+            "bepaari_name": b["name"],
+            "phone": b.get("phone", ""),
+            "date": date,
+            "opening_balance": opening_balance,
+            "sales_detail": sales_detail,
+            "summary": {
+                "gross_sales": today_gross,
+                "quantity": today_qty,
+                "commission": today_comm,
+                "commission_pct": b.get("commission_percent", settings.get("commission_rate", 4)),
+                "kk": today_kk,
+                "jb": today_jb,
+                "jb_rate": settings.get("jb_rate", 10),
+                "motor": today_motor,
+                "bhussa": today_bhussa,
+                "gawali": today_gawali,
+                "cash_advance": today_cash_adv,
+                "total_deductions": today_total_ded,
+                "net_amount": today_net,
+                "payments": today_payments,
+                "closing_balance": closing_balance
+            }
+        })
+    
+    return aakda_list
+
+
+@api_router.get("/bepaari-aakda/{bepaari_id}")
+async def get_single_bepaari_aakda(bepaari_id: str, date: str):
+    """Get Aakda for a single Bepaari"""
+    all_aakda = await get_bepaari_aakda(date)
+    for a in all_aakda:
+        if a["bepaari_id"] == bepaari_id:
+            return a
+    raise HTTPException(status_code=404, detail="No transactions found for this Bepaari on this date")
