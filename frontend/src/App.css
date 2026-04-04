@@ -436,3 +436,77 @@ tr:hover {
 .btn-clear:hover {
   background: #4a5568;
 }
+
+/* Party Statement Page */
+.hint {
+  color: #718096;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.statement-container {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.party-info {
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+}
+
+.party-info h3 {
+  font-size: 20px;
+  color: #1a365d;
+  margin-bottom: 5px;
+}
+
+.party-info p {
+  color: #718096;
+  font-size: 14px;
+}
+
+.statement-section {
+  margin-bottom: 25px;
+}
+
+.statement-section h4 {
+  font-size: 16px;
+  color: #4a5568;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-box {
+  background: #f7fafc;
+  border-radius: 8px;
+  padding: 20px;
+  border-left: 4px solid #48bb78;
+}
+
+.summary-box h4 {
+  margin-bottom: 15px;
+  color: #1a365d;
+}
+
+.summary-box p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.btn-excel {
+  background: #38a169;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-excel:hover {
+  background: #2f855a;
+}

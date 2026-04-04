@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -12,6 +13,8 @@ from models import (
     DailySale, CashBookEntry, DailySaleCreate, CashBookEntryCreate, MasterCreate
 )
 import uuid
+import io
+import csv
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -72,6 +75,11 @@ async def create_bepaari(data: MasterCreate):
     await db.bepaaris.insert_one(doc)
     return {"id": bepaari.id, "name": bepaari.name}
 
+@api_router.put("/bepaaris/{bepaari_id}")
+async def update_bepaari(bepaari_id: str, data: dict):
+    await db.bepaaris.update_one({"id": bepaari_id}, {"$set": data})
+    return {"status": "updated"}
+
 @api_router.delete("/bepaaris/{bepaari_id}")
 async def delete_bepaari(bepaari_id: str):
     await db.bepaaris.update_one({"id": bepaari_id}, {"$set": {"is_active": False}})
@@ -96,6 +104,11 @@ async def create_dukandar(data: MasterCreate):
     await db.dukandars.insert_one(doc)
     return {"id": dukandar.id, "name": dukandar.name}
 
+@api_router.put("/dukandars/{dukandar_id}")
+async def update_dukandar(dukandar_id: str, data: dict):
+    await db.dukandars.update_one({"id": dukandar_id}, {"$set": data})
+    return {"status": "updated"}
+
 @api_router.delete("/dukandars/{dukandar_id}")
 async def delete_dukandar(dukandar_id: str):
     await db.dukandars.update_one({"id": dukandar_id}, {"$set": {"is_active": False}})
@@ -116,6 +129,11 @@ async def create_advance_party(data: MasterCreate):
     await db.advance_parties.insert_one(doc)
     return {"id": party.id, "name": party.name}
 
+@api_router.delete("/advance-parties/{party_id}")
+async def delete_advance_party(party_id: str):
+    await db.advance_parties.update_one({"id": party_id}, {"$set": {"is_active": False}})
+    return {"status": "deleted"}
+
 
 # ============== CAPITAL PARTNERS ==============
 @api_router.get("/capital-partners")
@@ -135,14 +153,37 @@ async def create_capital_partner(data: MasterCreate):
     await db.capital_partners.insert_one(doc)
     return {"id": partner.id, "name": partner.name}
 
+@api_router.delete("/capital-partners/{partner_id}")
+async def delete_capital_partner(partner_id: str):
+    await db.capital_partners.update_one({"id": partner_id}, {"$set": {"is_active": False}})
+    return {"status": "deleted"}
+
 
 # ============== DAILY SALES ==============
 @api_router.get("/daily-sales")
-async def get_daily_sales(date: Optional[str] = None):
+async def get_daily_sales(
+    date: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    bepaari_id: Optional[str] = None,
+    dukandar_id: Optional[str] = None
+):
     query = {}
     if date:
         query["date"] = date
-    sales = await db.daily_sales.find(query).sort("date", -1).to_list(1000)
+    elif from_date and to_date:
+        query["date"] = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        query["date"] = {"$gte": from_date}
+    elif to_date:
+        query["date"] = {"$lte": to_date}
+    
+    if bepaari_id:
+        query["bepaari_id"] = bepaari_id
+    if dukandar_id:
+        query["dukandar_id"] = dukandar_id
+    
+    sales = await db.daily_sales.find(query).sort("date", -1).to_list(5000)
     return serialize_docs(sales)
 
 @api_router.post("/daily-sales")
@@ -181,11 +222,29 @@ async def delete_daily_sale(sale_id: str):
 
 # ============== CASH BOOK ==============
 @api_router.get("/cash-book")
-async def get_cash_book(date: Optional[str] = None):
+async def get_cash_book(
+    date: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    party_id: Optional[str] = None,
+    type: Optional[str] = None
+):
     query = {}
     if date:
         query["date"] = date
-    entries = await db.cash_book.find(query).sort("date", -1).to_list(2000)
+    elif from_date and to_date:
+        query["date"] = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        query["date"] = {"$gte": from_date}
+    elif to_date:
+        query["date"] = {"$lte": to_date}
+    
+    if party_id:
+        query["party_id"] = party_id
+    if type:
+        query["type"] = type
+    
+    entries = await db.cash_book.find(query).sort("date", -1).to_list(5000)
     return serialize_docs(entries)
 
 @api_router.post("/cash-book")
@@ -219,12 +278,153 @@ async def delete_cash_book_entry(entry_id: str):
     return {"status": "deleted"}
 
 
+# ============== PARTY STATEMENT (FOR DISPUTES) ==============
+@api_router.get("/party-statement/{party_type}/{party_id}")
+async def get_party_statement(
+    party_type: str,
+    party_id: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Get complete statement for a Bepaari or Dukandar"""
+    
+    # Get party info
+    if party_type == "bepaari":
+        party = await db.bepaaris.find_one({"id": party_id})
+        cash_type = "BEPAARI"
+    else:
+        party = await db.dukandars.find_one({"id": party_id})
+        cash_type = "DUKANDAR"
+    
+    if not party:
+        raise HTTPException(status_code=404, detail="Party not found")
+    
+    # Build date query
+    date_query = {}
+    if from_date and to_date:
+        date_query = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        date_query = {"$gte": from_date}
+    elif to_date:
+        date_query = {"$lte": to_date}
+    
+    # Get sales
+    sales_query = {"bepaari_id" if party_type == "bepaari" else "dukandar_id": party_id}
+    if date_query:
+        sales_query["date"] = date_query
+    sales = serialize_docs(await db.daily_sales.find(sales_query).sort("date", 1).to_list(5000))
+    
+    # Get cash book entries
+    cash_query = {"party_id": party_id, "type": cash_type}
+    if date_query:
+        cash_query["date"] = date_query
+    cash_entries = serialize_docs(await db.cash_book.find(cash_query).sort("date", 1).to_list(5000))
+    
+    # Calculate totals
+    total_sales = sum(s["gross_amount"] for s in sales)
+    total_qty = sum(s["quantity"] for s in sales)
+    total_discount = sum(s["discount"] for s in sales)
+    
+    if party_type == "bepaari":
+        payments = sum(c["amount"] for c in cash_entries if c["sub_type"] == "PAYMENT")
+        deductions = sum(c["amount"] for c in cash_entries if c["sub_type"] != "PAYMENT")
+    else:
+        payments = sum(c["amount"] for c in cash_entries if c["sub_type"] == "RECEIPT")
+        deductions = sum(c["amount"] for c in cash_entries if c["sub_type"] != "RECEIPT")
+    
+    return {
+        "party": serialize_doc(party),
+        "sales": sales,
+        "cash_entries": cash_entries,
+        "summary": {
+            "total_sales": total_sales,
+            "total_quantity": total_qty,
+            "total_discount": total_discount,
+            "total_payments": payments,
+            "total_deductions": deductions,
+            "opening_balance": party.get("opening_balance", 0)
+        }
+    }
+
+
+# ============== EXCEL EXPORT ==============
+@api_router.get("/export/party-statement/{party_type}/{party_id}")
+async def export_party_statement(
+    party_type: str,
+    party_id: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Export party statement to CSV/Excel"""
+    statement = await get_party_statement(party_type, party_id, from_date, to_date)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    party_name = statement["party"]["name"]
+    writer.writerow([f"Statement for: {party_name}"])
+    writer.writerow([f"Party Type: {party_type.upper()}"])
+    writer.writerow([f"Phone: {statement['party'].get('phone', 'N/A')}"])
+    writer.writerow([f"Opening Balance: {statement['party'].get('opening_balance', 0)}"])
+    if from_date:
+        writer.writerow([f"From: {from_date}"])
+    if to_date:
+        writer.writerow([f"To: {to_date}"])
+    writer.writerow([])
+    
+    # Sales
+    writer.writerow(["=== SALES ==="])
+    writer.writerow(["Date", "Bepaari" if party_type == "dukandar" else "Dukandar", "Quantity", "Rate", "Gross", "Discount", "Net"])
+    for s in statement["sales"]:
+        writer.writerow([
+            s["date"],
+            s["bepaari_name"] if party_type == "dukandar" else s["dukandar_name"],
+            s["quantity"],
+            s["rate"],
+            s["gross_amount"],
+            s["discount"],
+            s["net_amount"]
+        ])
+    writer.writerow([])
+    
+    # Cash Book Entries
+    writer.writerow(["=== PAYMENTS/RECEIPTS ==="])
+    writer.writerow(["Date", "Type", "Sub-Type", "Amount", "Mode"])
+    for c in statement["cash_entries"]:
+        writer.writerow([c["date"], c["type"], c["sub_type"], c["amount"], c["mode"]])
+    writer.writerow([])
+    
+    # Summary
+    writer.writerow(["=== SUMMARY ==="])
+    writer.writerow(["Total Sales", statement["summary"]["total_sales"]])
+    writer.writerow(["Total Quantity", statement["summary"]["total_quantity"]])
+    writer.writerow(["Total Discount", statement["summary"]["total_discount"]])
+    writer.writerow(["Total Payments", statement["summary"]["total_payments"]])
+    writer.writerow(["Total Deductions", statement["summary"]["total_deductions"]])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={party_name}_statement.csv"}
+    )
+
+
 # ============== BEPAARI LEDGER ==============
 @api_router.get("/bepaari-ledger")
-async def get_bepaari_ledger():
+async def get_bepaari_ledger(as_on_date: Optional[str] = None):
     bepaaris = await db.bepaaris.find({"is_active": True}).to_list(500)
-    sales = await db.daily_sales.find({}).to_list(5000)
-    cash_entries = await db.cash_book.find({"type": "BEPAARI"}).to_list(5000)
+    
+    sales_query = {}
+    cash_query = {"type": "BEPAARI"}
+    if as_on_date:
+        sales_query["date"] = {"$lte": as_on_date}
+        cash_query["date"] = {"$lte": as_on_date}
+    
+    sales = await db.daily_sales.find(sales_query).to_list(5000)
+    cash_entries = await db.cash_book.find(cash_query).to_list(5000)
     settings = await get_settings()
     
     ledger = []
@@ -256,6 +456,7 @@ async def get_bepaari_ledger():
         ledger.append({
             "id": b["id"],
             "name": b["name"],
+            "phone": b.get("phone", ""),
             "opening": b.get("opening_balance", 0),
             "gross_sales": gross,
             "quantity": qty,
@@ -277,10 +478,17 @@ async def get_bepaari_ledger():
 
 # ============== DUKANDAR LEDGER ==============
 @api_router.get("/dukandar-ledger")
-async def get_dukandar_ledger():
+async def get_dukandar_ledger(as_on_date: Optional[str] = None):
     dukandars = await db.dukandars.find({"is_active": True}).to_list(500)
-    sales = await db.daily_sales.find({}).to_list(5000)
-    cash_entries = await db.cash_book.find({"type": "DUKANDAR"}).to_list(5000)
+    
+    sales_query = {}
+    cash_query = {"type": "DUKANDAR"}
+    if as_on_date:
+        sales_query["date"] = {"$lte": as_on_date}
+        cash_query["date"] = {"$lte": as_on_date}
+    
+    sales = await db.daily_sales.find(sales_query).to_list(5000)
+    cash_entries = await db.cash_book.find(cash_query).to_list(5000)
     
     ledger = []
     for d in serialize_docs(dukandars):
@@ -297,6 +505,7 @@ async def get_dukandar_ledger():
         ledger.append({
             "id": d["id"],
             "name": d["name"],
+            "phone": d.get("phone", ""),
             "opening": d.get("opening_balance", 0),
             "purchases": purchases,
             "discounts": discounts,
@@ -310,11 +519,16 @@ async def get_dukandar_ledger():
 
 # ============== BALANCE SHEET ==============
 @api_router.get("/balance-sheet")
-async def get_balance_sheet():
+async def get_balance_sheet(as_on_date: Optional[str] = None):
     settings = await get_settings()
-    bepaari_ledger = await get_bepaari_ledger()
-    dukandar_ledger = await get_dukandar_ledger()
-    cash_entries = serialize_docs(await db.cash_book.find({}).to_list(5000))
+    bepaari_ledger = await get_bepaari_ledger(as_on_date)
+    dukandar_ledger = await get_dukandar_ledger(as_on_date)
+    
+    cash_query = {}
+    if as_on_date:
+        cash_query["date"] = {"$lte": as_on_date}
+    
+    cash_entries = serialize_docs(await db.cash_book.find(cash_query).to_list(5000))
     capital_partners = serialize_docs(await db.capital_partners.find({"is_active": True}).to_list(100))
     advance_parties = serialize_docs(await db.advance_parties.find({"is_active": True}).to_list(100))
     
@@ -386,6 +600,7 @@ async def get_balance_sheet():
     total_assets = cash_balance + bank_balance + patti + bepaari_advances + mandi_total + bf_disc_total + mhn_total + adv_total
     
     return {
+        "as_on_date": as_on_date or "Current",
         "liabilities": {
             "capital": capital, "loans": loans, "amanat": amanat,
             "bepaari_payables": bepaari_payables, "dukandar_advances": dukandar_advances,
