@@ -454,13 +454,13 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         cash_adv = sum(c["amount"] for c in b_cash if c.get("sub_type") == "CASH_ADV")
         payments = sum(c["amount"] for c in b_cash if c.get("sub_type") == "PAYMENT")
         
-        # Adjustments: Debit to Bepaari = reduces our payable (like a payment received on our behalf)
-        adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
-                       if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"])
+        # Adjustments: CREDIT to Bepaari = reduces our payable (someone paid them on our behalf)
+        adj_credit = sum(a["amount"] for a in serialize_docs(adjustments) 
+                       if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"])
         
         total_ded = commission + kk + jb + motor + bhussa + gawali + cash_adv
         net_payable = b.get("opening_balance", 0) + gross - total_ded
-        balance = net_payable - payments - adj_debit
+        balance = net_payable - payments - adj_credit
         
         ledger.append({
             "id": b["id"],
@@ -479,7 +479,7 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
             "total_deductions": total_ded,
             "net_payable": net_payable,
             "payments": payments,
-            "adjustments": adj_debit,
+            "adjustments": adj_credit,
             "balance": balance
         })
     
@@ -516,12 +516,12 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         bf_disc_in_receipt = sum(c.get("bf_disc", 0) for c in d_cash if c.get("sub_type") == "RECEIPT")
         bf_disc = bf_disc_standalone + bf_disc_in_receipt
         
-        # Adjustments: Credit to Dukandar = reduces their receivable (they paid someone on our behalf)
-        adj_credit = sum(a["amount"] for a in serialize_docs(adjustments) 
-                        if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"])
+        # Adjustments: DEBIT to Dukandar = reduces their receivable (they paid someone on our behalf)
+        adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
+                        if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"])
         
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
-        balance = net_receivable - receipts - bf_disc - adj_credit
+        balance = net_receivable - receipts - bf_disc - adj_debit
         
         ledger.append({
             "id": d["id"],
@@ -533,7 +533,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "net_receivable": net_receivable,
             "receipts": receipts,
             "bf_disc": bf_disc,
-            "adjustments": adj_credit,
+            "adjustments": adj_debit,
             "balance": balance
         })
     

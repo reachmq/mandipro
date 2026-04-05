@@ -394,12 +394,12 @@ const Adjustments = () => {
         
         <div className="jv-row">
           <div className="jv-section debit-section">
-            <label>DEBIT (Reduces our Payable)</label>
+            <label>DEBIT - Who Paid? (Dukandar/Advance)</label>
             <select value={form.debit_type} onChange={(e) => setForm({ ...form, debit_type: e.target.value, debit_party_id: "" })} required>
               <option value="">Select Type</option>
-              <option value="BEPAARI">Bepaari</option>
               <option value="DUKANDAR">Dukandar</option>
               <option value="ADVANCE">Advance Party</option>
+              <option value="BEPAARI">Bepaari</option>
               <option value="CAPITAL">Capital</option>
               <option value="LOAN">Loan</option>
               <option value="AMANAT">Amanat</option>
@@ -411,7 +411,7 @@ const Adjustments = () => {
           </div>
 
           <div className="jv-section credit-section">
-            <label>CREDIT (Reduces their Receivable)</label>
+            <label>CREDIT - Who Received? (Bepaari)</label>
             <select value={form.credit_type} onChange={(e) => setForm({ ...form, credit_type: e.target.value, credit_party_id: "" })} required>
               <option value="">Select Type</option>
               <option value="BEPAARI">Bepaari</option>
