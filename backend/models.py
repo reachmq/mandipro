@@ -111,6 +111,7 @@ class CashBookEntry(BaseModel):
     party_name: Optional[str] = None
     particulars: Optional[str] = None
     amount: float
+    bf_disc: float = 0.0  # Cash discount given (for DUKANDAR RECEIPT)
     mode: str
 
 class DailySaleCreate(BaseModel):
@@ -128,6 +129,7 @@ class CashBookEntryCreate(BaseModel):
     party_id: Optional[str] = None
     particulars: Optional[str] = None
     amount: float
+    bf_disc: float = 0.0  # Cash discount given
     mode: str
 
 class MasterCreate(BaseModel):

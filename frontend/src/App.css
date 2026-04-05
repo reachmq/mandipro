@@ -858,4 +858,26 @@ tr:hover {
   font-weight: 500;
 }
 
+
+/* Cash calculation hint */
+.cash-calc-hint {
+  margin-top: -10px;
+  margin-bottom: 15px;
+  padding: 8px 15px;
+  background: #e6fffa;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #234e52;
+}
+
+/* BF Disc input field */
+.bf-disc-input {
+  border: 1px solid #dd6b20 !important;
+  background: #fffaf0;
+}
+
+.bf-disc-input::placeholder {
+  color: #dd6b20;
+}
+
 }

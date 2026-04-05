@@ -167,14 +167,14 @@ const DailySales = () => {
 const CashBook = () => {
   const [entries, setEntries] = useState([]);
   const [parties, setParties] = useState([]);
-  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", mode: "CASH", particulars: "" });
+  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "" });
   const [loading, setLoading] = useState(true);
 
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
   const subTypes = {
     BEPAARI: ["PAYMENT", "MOTOR", "BHUSSA", "GAWALI", "CASH_ADV"],
-    DUKANDAR: ["RECEIPT", "BF_DISC"],
+    DUKANDAR: ["RECEIPT"],
     CAPITAL: ["TAKEN", "REPAID", "WITHDRAWN"],
     LOAN: ["TAKEN", "REPAID"],
     AMANAT: ["TAKEN", "REPAID"],
@@ -217,12 +217,19 @@ const CashBook = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await axios.post(`${API}/cash-book`, { ...form, amount: parseFloat(form.amount) });
-    setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", particulars: "" });
+    await axios.post(`${API}/cash-book`, { 
+      ...form, 
+      amount: parseFloat(form.amount),
+      bf_disc: form.bf_disc ? parseFloat(form.bf_disc) : 0
+    });
+    setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
     fetchData();
   };
 
   const handleDelete = async (id) => { if (window.confirm("Delete?")) { await axios.delete(`${API}/cash-book/${id}`); fetchData(); } };
+
+  // Show BF_Disc field only for DUKANDAR RECEIPT
+  const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
 
   if (loading) return <div className="loading">Loading...</div>;
 
@@ -232,11 +239,11 @@ const CashBook = () => {
       
       <form className="entry-form" onSubmit={handleSubmit}>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
-        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, sub_type: "", party_id: "" })} required>
+        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, sub_type: "", party_id: "", bf_disc: "" })} required>
           <option value="">Type</option>
           {types.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={form.sub_type} onChange={(e) => setForm({ ...form, sub_type: e.target.value })} required disabled={!form.type}>
+        <select value={form.sub_type} onChange={(e) => setForm({ ...form, sub_type: e.target.value, bf_disc: "" })} required disabled={!form.type}>
           <option value="">Sub-Type</option>
           {(subTypes[form.type] || []).map((st) => <option key={st} value={st}>{st}</option>)}
         </select>
@@ -244,13 +251,29 @@ const CashBook = () => {
           <option value="">Party</option>
           {filteredParties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <input type="number" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+        <input type="number" placeholder="Amount (Full Payable)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+        {showBfDisc && (
+          <input 
+            type="number" 
+            placeholder="BF Disc (if any)" 
+            value={form.bf_disc} 
+            onChange={(e) => setForm({ ...form, bf_disc: e.target.value })} 
+            className="bf-disc-input"
+            style={{maxWidth: '120px'}}
+          />
+        )}
         <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} required>
           {["CASH", "BANK", "UPI", "TRANSFER"].map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <input type="text" placeholder="Comments (UPI ref, etc.)" value={form.particulars || ""} onChange={(e) => setForm({ ...form, particulars: e.target.value })} style={{minWidth: '180px'}} />
         <button type="submit" className="btn-primary">Add</button>
       </form>
+      
+      {showBfDisc && form.amount && (
+        <div className="cash-calc-hint">
+          Actual Cash Received: <strong>{formatCurrency(parseFloat(form.amount || 0) - parseFloat(form.bf_disc || 0))}</strong>
+        </div>
+      )}
 
       <div className="filter-bar">
         <label>From:</label><input type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} />
@@ -264,12 +287,14 @@ const CashBook = () => {
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>Mode</th><th>Comments</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>BF Disc</th><th>Mode</th><th>Comments</th><th></th></tr></thead>
           <tbody>
             {entries.map((e) => (
               <tr key={e.id}>
                 <td>{e.date}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
-                <td>{formatCurrency(e.amount)}</td><td>{e.mode}</td><td className="comments-col">{e.particulars || "-"}</td>
+                <td>{formatCurrency(e.amount)}</td>
+                <td className="bf-disc-col">{e.bf_disc > 0 ? formatCurrency(e.bf_disc) : "-"}</td>
+                <td>{e.mode}</td><td className="comments-col">{e.particulars || "-"}</td>
                 <td><button className="btn-delete" onClick={() => handleDelete(e.id)}>X</button></td>
               </tr>
             ))}

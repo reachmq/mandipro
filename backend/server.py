@@ -266,6 +266,7 @@ async def create_cash_book_entry(data: CashBookEntryCreate):
         party_name=party_name,
         particulars=data.particulars,
         amount=data.amount,
+        bf_disc=data.bf_disc,
         mode=data.mode
     )
     doc = entry.model_dump()
@@ -510,7 +511,10 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         purchases = sum(s["gross_amount"] for s in d_sales)
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
-        bf_disc = sum(c["amount"] for c in d_cash if c.get("sub_type") == "BF_DISC")  # Cash discount given
+        # BF_DISC: from standalone BF_DISC entries + bf_disc field in RECEIPT entries
+        bf_disc_standalone = sum(c["amount"] for c in d_cash if c.get("sub_type") == "BF_DISC")
+        bf_disc_in_receipt = sum(c.get("bf_disc", 0) for c in d_cash if c.get("sub_type") == "RECEIPT")
+        bf_disc = bf_disc_standalone + bf_disc_in_receipt
         
         # Adjustments: Credit to Dukandar = reduces their receivable (they paid someone on our behalf)
         adj_credit = sum(a["amount"] for a in serialize_docs(adjustments) 
@@ -587,18 +591,31 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
     zakat_total = settings.get("zakat_opening", 0) + zakat_prov - zakat_paid
     
     cash_in_types = ["RECEIPT", "TAKEN", "RECEIVED"]
-    cash_in = sum(c["amount"] for c in cash_entries if c.get("mode") == "CASH" and c.get("sub_type") in cash_in_types)
+    # For RECEIPT entries, actual cash received = amount - bf_disc
+    cash_in = sum(
+        (c["amount"] - c.get("bf_disc", 0)) if c.get("sub_type") == "RECEIPT" else c["amount"]
+        for c in cash_entries 
+        if c.get("mode") == "CASH" and c.get("sub_type") in cash_in_types
+    )
     cash_out = sum(c["amount"] for c in cash_entries if c.get("mode") == "CASH" and c.get("sub_type") not in cash_in_types)
     cash_balance = settings.get("opening_cash", 0) + cash_in - cash_out
     
     bank_modes = ["BANK", "UPI", "TRANSFER"]
-    bank_in = sum(c["amount"] for c in cash_entries if c.get("mode") in bank_modes and c.get("sub_type") in cash_in_types)
+    # For RECEIPT entries, actual bank received = amount - bf_disc
+    bank_in = sum(
+        (c["amount"] - c.get("bf_disc", 0)) if c.get("sub_type") == "RECEIPT" else c["amount"]
+        for c in cash_entries 
+        if c.get("mode") in bank_modes and c.get("sub_type") in cash_in_types
+    )
     bank_out = sum(c["amount"] for c in cash_entries if c.get("mode") in bank_modes and c.get("sub_type") not in cash_in_types)
     bank_balance = settings.get("opening_bank", 0) + bank_in - bank_out
     
     exp_types = ["MANDI", "TRAVEL", "FOOD", "SALARY", "MISC", "OTHER"]
     mandi_exp = sum(c["amount"] for c in cash_entries if c.get("sub_type") in exp_types)
-    bf_disc = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "BF_DISC")
+    # BF_DISC: from standalone BF_DISC entries + bf_disc field in RECEIPT entries
+    bf_disc_standalone = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "BF_DISC")
+    bf_disc_in_receipt = sum(c.get("bf_disc", 0) for c in cash_entries if c.get("sub_type") == "RECEIPT")
+    bf_disc = bf_disc_standalone + bf_disc_in_receipt
     mhn_personal = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "MHN_PERSONAL")
     
     mandi_total = settings.get("mandi_exp_opening", 0) + mandi_exp
