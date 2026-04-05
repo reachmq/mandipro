@@ -851,4 +851,11 @@ tr:hover {
 .adjustment-col {
   color: #805ad5;
   font-weight: 500;
+
+/* BF Discount column (cash discount given) */
+.bf-disc-col {
+  color: #dd6b20;
+  font-weight: 500;
+}
+
 }

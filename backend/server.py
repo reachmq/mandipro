@@ -510,13 +510,14 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         purchases = sum(s["gross_amount"] for s in d_sales)
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
+        bf_disc = sum(c["amount"] for c in d_cash if c.get("sub_type") == "BF_DISC")  # Cash discount given
         
         # Adjustments: Credit to Dukandar = reduces their receivable (they paid someone on our behalf)
         adj_credit = sum(a["amount"] for a in serialize_docs(adjustments) 
                         if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"])
         
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
-        balance = net_receivable - receipts - adj_credit
+        balance = net_receivable - receipts - bf_disc - adj_credit
         
         ledger.append({
             "id": d["id"],
@@ -527,6 +528,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "discounts": discounts,
             "net_receivable": net_receivable,
             "receipts": receipts,
+            "bf_disc": bf_disc,
             "adjustments": adj_credit,
             "balance": balance
         })

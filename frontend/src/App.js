@@ -625,8 +625,8 @@ const DukandarLedger = () => {
 
   const totals = ledger.reduce((acc, d) => ({
     purchases: acc.purchases + d.purchases, discounts: acc.discounts + d.discounts, 
-    receipts: acc.receipts + d.receipts, adj: acc.adj + (d.adjustments || 0), balance: acc.balance + d.balance
-  }), { purchases: 0, discounts: 0, receipts: 0, adj: 0, balance: 0 });
+    receipts: acc.receipts + d.receipts, bf_disc: acc.bf_disc + (d.bf_disc || 0), adj: acc.adj + (d.adjustments || 0), balance: acc.balance + d.balance
+  }), { purchases: 0, discounts: 0, receipts: 0, bf_disc: 0, adj: 0, balance: 0 });
 
   return (
     <div className="page">
@@ -638,12 +638,13 @@ const DukandarLedger = () => {
       </div>
       <div className="table-container">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Receivable</th><th>Receipts</th><th>Adj</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Recv</th><th>Receipts</th><th>BF Disc</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
             {ledger.filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).map((d) => (
               <tr key={d.id}>
                 <td><strong>{d.name}</strong></td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
+                <td className="bf-disc-col">{d.bf_disc > 0 ? formatCurrency(d.bf_disc) : "-"}</td>
                 <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>
                 <td className={d.balance >= 0 ? "positive" : "negative"}>{formatCurrency(d.balance)}</td>
               </tr>
@@ -651,6 +652,7 @@ const DukandarLedger = () => {
             <tr className="total-row">
               <td><strong>TOTAL</strong></td><td></td><td>-</td><td><strong>{formatCurrency(totals.purchases)}</strong></td><td><strong>{formatCurrency(totals.discounts)}</strong></td>
               <td>-</td><td><strong>{formatCurrency(totals.receipts)}</strong></td>
+              <td><strong>{totals.bf_disc > 0 ? formatCurrency(totals.bf_disc) : "-"}</strong></td>
               <td><strong>{totals.adj > 0 ? formatCurrency(totals.adj) : "-"}</strong></td><td><strong>{formatCurrency(totals.balance)}</strong></td>
             </tr>
           </tbody>
