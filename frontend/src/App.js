@@ -167,7 +167,7 @@ const DailySales = () => {
 const CashBook = () => {
   const [entries, setEntries] = useState([]);
   const [parties, setParties] = useState([]);
-  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", mode: "CASH" });
+  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", mode: "CASH", particulars: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "" });
   const [loading, setLoading] = useState(true);
 
@@ -218,7 +218,7 @@ const CashBook = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     await axios.post(`${API}/cash-book`, { ...form, amount: parseFloat(form.amount) });
-    setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "" });
+    setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", particulars: "" });
     fetchData();
   };
 
@@ -248,6 +248,7 @@ const CashBook = () => {
         <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} required>
           {["CASH", "BANK", "UPI", "TRANSFER"].map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        <input type="text" placeholder="Comments (UPI ref, etc.)" value={form.particulars || ""} onChange={(e) => setForm({ ...form, particulars: e.target.value })} style={{minWidth: '180px'}} />
         <button type="submit" className="btn-primary">Add</button>
       </form>
 
@@ -263,12 +264,12 @@ const CashBook = () => {
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>Mode</th><th>Comments</th><th></th></tr></thead>
           <tbody>
             {entries.map((e) => (
               <tr key={e.id}>
                 <td>{e.date}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
-                <td>{formatCurrency(e.amount)}</td><td>{e.mode}</td>
+                <td>{formatCurrency(e.amount)}</td><td>{e.mode}</td><td className="comments-col">{e.particulars || "-"}</td>
                 <td><button className="btn-delete" onClick={() => handleDelete(e.id)}>X</button></td>
               </tr>
             ))}
@@ -284,6 +285,8 @@ const Adjustments = () => {
   const [adjustments, setAdjustments] = useState([]);
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
+  const [advanceParties, setAdvanceParties] = useState([]);
+  const [capitalPartners, setCapitalPartners] = useState([]);
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     debit_type: "",
@@ -297,14 +300,18 @@ const Adjustments = () => {
 
   const fetchData = async () => {
     try {
-      const [adjRes, bepaariRes, dukandarRes] = await Promise.all([
+      const [adjRes, bepaariRes, dukandarRes, advRes, capRes] = await Promise.all([
         axios.get(`${API}/adjustments`),
         axios.get(`${API}/bepaaris`),
-        axios.get(`${API}/dukandars`)
+        axios.get(`${API}/dukandars`),
+        axios.get(`${API}/advance-parties`),
+        axios.get(`${API}/capital-partners`)
       ]);
       setAdjustments(adjRes.data);
       setBeparis(bepaariRes.data);
       setDukandars(dukandarRes.data);
+      setAdvanceParties(advRes.data);
+      setCapitalPartners(capRes.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -314,6 +321,10 @@ const Adjustments = () => {
   const getParties = (type) => {
     if (type === "BEPAARI") return bepaaris;
     if (type === "DUKANDAR") return dukandars;
+    if (type === "ADVANCE") return advanceParties;
+    if (type === "CAPITAL") return capitalPartners.filter(p => p.partner_type === "CAPITAL");
+    if (type === "LOAN") return capitalPartners.filter(p => p.partner_type === "LOAN");
+    if (type === "AMANAT") return capitalPartners.filter(p => p.partner_type === "AMANAT");
     return [];
   };
 
@@ -363,6 +374,10 @@ const Adjustments = () => {
               <option value="">Select Type</option>
               <option value="BEPAARI">Bepaari</option>
               <option value="DUKANDAR">Dukandar</option>
+              <option value="ADVANCE">Advance Party</option>
+              <option value="CAPITAL">Capital</option>
+              <option value="LOAN">Loan</option>
+              <option value="AMANAT">Amanat</option>
             </select>
             <select value={form.debit_party_id} onChange={(e) => setForm({ ...form, debit_party_id: e.target.value })} required disabled={!form.debit_type}>
               <option value="">Select Party</option>
@@ -376,6 +391,10 @@ const Adjustments = () => {
               <option value="">Select Type</option>
               <option value="BEPAARI">Bepaari</option>
               <option value="DUKANDAR">Dukandar</option>
+              <option value="ADVANCE">Advance Party</option>
+              <option value="CAPITAL">Capital</option>
+              <option value="LOAN">Loan</option>
+              <option value="AMANAT">Amanat</option>
             </select>
             <select value={form.credit_party_id} onChange={(e) => setForm({ ...form, credit_party_id: e.target.value })} required disabled={!form.credit_type}>
               <option value="">Select Party</option>

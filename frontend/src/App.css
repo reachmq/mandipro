@@ -834,3 +834,21 @@ tr:hover {
   flex-wrap: wrap;
   align-items: center;
 }
+
+
+
+/* Comments column */
+.comments-col {
+  font-size: 12px;
+  color: #666;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Adjustment column */
+.adjustment-col {
+  color: #805ad5;
+  font-weight: 500;
+}
