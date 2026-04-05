@@ -622,11 +622,19 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
     bf_disc_total = settings.get("bf_disc_opening", 0) + bf_disc
     mhn_total = settings.get("mhn_personal_opening", 0) + mhn_personal
     
+    # Get adjustments for advance party calculations
+    adj_query = {}
+    if as_on_date:
+        adj_query["date"] = {"$lte": as_on_date}
+    adjustments = serialize_docs(await db.adjustments.find(adj_query).to_list(5000))
+    
     adv_receivables = []
     for ap in advance_parties:
         given = sum(c["amount"] for c in cash_entries if c.get("type") == "ADVANCE" and c.get("sub_type") == "GIVEN" and c.get("party_name") == ap["name"])
         received = sum(c["amount"] for c in cash_entries if c.get("type") == "ADVANCE" and c.get("sub_type") == "RECEIVED" and c.get("party_name") == ap["name"])
-        bal = ap.get("opening_balance", 0) + given - received
+        # JV: When ADVANCE party is on DEBIT side, they paid someone (reduces their receivable)
+        jv_paid = sum(a["amount"] for a in adjustments if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == ap["id"])
+        bal = ap.get("opening_balance", 0) + given - received - jv_paid
         if bal != 0:
             adv_receivables.append({"name": ap["name"], "amount": bal})
     
