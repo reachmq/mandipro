@@ -511,17 +511,19 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         purchases = sum(s["gross_amount"] for s in d_sales)
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
-        # BF_DISC: from standalone BF_DISC entries + bf_disc field in RECEIPT entries
+        # BF_DISC: Only from standalone BF_DISC entries reduces balance
+        # bf_disc field in RECEIPT is for expense tracking only (Amount already settles full balance)
         bf_disc_standalone = sum(c["amount"] for c in d_cash if c.get("sub_type") == "BF_DISC")
         bf_disc_in_receipt = sum(c.get("bf_disc", 0) for c in d_cash if c.get("sub_type") == "RECEIPT")
-        bf_disc = bf_disc_standalone + bf_disc_in_receipt
+        bf_disc_total = bf_disc_standalone + bf_disc_in_receipt  # For display only
         
         # Adjustments: DEBIT to Dukandar = reduces their receivable (they paid someone on our behalf)
         adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
                         if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"])
         
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
-        balance = net_receivable - receipts - bf_disc - adj_debit
+        # Only standalone BF_DISC reduces balance, NOT bf_disc from RECEIPT (already in Amount)
+        balance = net_receivable - receipts - bf_disc_standalone - adj_debit
         
         ledger.append({
             "id": d["id"],
@@ -532,7 +534,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "discounts": discounts,
             "net_receivable": net_receivable,
             "receipts": receipts,
-            "bf_disc": bf_disc,
+            "bf_disc": bf_disc_total,  # Shows total for reference
             "adjustments": adj_debit,
             "balance": balance
         })
