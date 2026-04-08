@@ -971,6 +971,27 @@ const PartyStatement = () => {
             </div>
           )}
 
+          {/* NEW: Balance Transfers Section */}
+          {statement.balance_transfers && statement.balance_transfers.length > 0 && (
+            <div className="statement-section">
+              <h4>Balance Transfers ({statement.balance_transfers.length} entries)</h4>
+              <table>
+                <thead><tr><th>Date</th><th>Direction</th><th>Effect</th><th>Amount</th><th>Narration</th></tr></thead>
+                <tbody>
+                  {statement.balance_transfers.map((t, i) => (
+                    <tr key={i} className={t.direction === "IN" ? "credit-row" : "debit-row"}>
+                      <td>{t.date}</td>
+                      <td><span className={`badge ${t.direction === "IN" ? "credit" : "debit"}`}>{t.direction}</span></td>
+                      <td>{t.effect}</td>
+                      <td>{formatCurrency(t.amount)}</td>
+                      <td>{t.narration || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="summary-box">
             <h4>Summary</h4>
             <p>Total Sales: {formatCurrency(statement.summary.total_sales)} ({statement.summary.total_quantity} qty)</p>
@@ -978,6 +999,12 @@ const PartyStatement = () => {
             <p>Total {partyType === "bepaari" ? "Payments" : "Receipts"}: {formatCurrency(statement.summary.total_payments)}</p>
             {statement.summary.total_adjustments > 0 && (
               <p>Total Adjustments (JV): {formatCurrency(statement.summary.total_adjustments)}</p>
+            )}
+            {(statement.summary.transfers_in > 0 || statement.summary.transfers_out > 0) && (
+              <>
+                {statement.summary.transfers_in > 0 && <p>Balance Transfers In: {formatCurrency(statement.summary.transfers_in)}</p>}
+                {statement.summary.transfers_out > 0 && <p>Balance Transfers Out: {formatCurrency(statement.summary.transfers_out)}</p>}
+              </>
             )}
             <p>Opening Balance: {formatCurrency(statement.summary.opening_balance)}</p>
           </div>

@@ -112,6 +112,10 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | 08 Apr 2026 | Party Statement now includes JV/Adjustments entries |
 | 08 Apr 2026 | Balance Sheet shows individual Capital/Loans/Amanat investor names |
 | 08 Apr 2026 | CSV export includes adjustments section |
+| 08 Apr 2026 | **CRITICAL FIX: Balance Transfers now create audit records in `balance_transfers` collection** |
+| 08 Apr 2026 | Party Statement now includes Balance Transfers section (IN/OUT) |
+| 08 Apr 2026 | Added `/api/balance-transfers/backfill` endpoint for retroactive record creation |
+| 08 Apr 2026 | Backfilled Siraj Kurla → Lala Andheri transfer (₹1,59,000) |
 
 ---
 
@@ -143,6 +147,8 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 5. Settings (commission rate, KK fixed, JB rate) are stored in MongoDB `settings` collection
 6. Party Statement now returns `adjustments` array with JV entries and `total_adjustments` in summary
 7. Balance Sheet returns `capital_list`, `loans_list`, `amanat_list` arrays for individual investor breakdown
+8. **Balance Transfers now create records in `balance_transfers` collection** - these show in Party Statement
+9. Use `/api/balance-transfers/backfill` endpoint to create audit records for past transfers (does NOT modify balances)
 
 ---
 

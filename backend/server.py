@@ -367,9 +367,11 @@ async def get_party_statement(
     if party_type == "bepaari":
         party = await db.bepaaris.find_one({"id": party_id})
         cash_type = "BEPAARI"
+        transfer_type = "BEPAARI"
     else:
         party = await db.dukandars.find_one({"id": party_id})
         cash_type = "DUKANDAR"
+        transfer_type = "DUKANDAR"
     
     if not party:
         raise HTTPException(status_code=404, detail="Party not found")
@@ -430,10 +432,39 @@ async def get_party_statement(
             if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id
         ]
     
+    # Get balance transfers where this party is involved (FROM or TO)
+    transfer_query = {"$or": [{"from_party_id": party_id}, {"to_party_id": party_id}]}
+    if date_query:
+        transfer_query["date"] = date_query
+    
+    all_transfers = serialize_docs(await db.balance_transfers.find(transfer_query).sort("date", 1).to_list(5000))
+    
+    # Format transfers with direction
+    party_transfers = []
+    for t in all_transfers:
+        if t.get("from_party_id") == party_id:
+            # Balance transferred OUT of this party
+            party_transfers.append({
+                **t,
+                "direction": "OUT",
+                "effect": f"Balance transferred to {t.get('to_party_name', 'Unknown')}"
+            })
+        elif t.get("to_party_id") == party_id:
+            # Balance transferred INTO this party
+            party_transfers.append({
+                **t,
+                "direction": "IN",
+                "effect": f"Balance received from {t.get('from_party_name', 'Unknown')}"
+            })
+    
     # Calculate totals
     total_sales = sum(s["gross_amount"] for s in sales)
     total_qty = sum(s["quantity"] for s in sales)
     total_discount = sum(s["discount"] for s in sales)
+    
+    # Calculate transfer totals
+    transfers_in = sum(t["amount"] for t in party_transfers if t["direction"] == "IN")
+    transfers_out = sum(t["amount"] for t in party_transfers if t["direction"] == "OUT")
     
     if party_type == "bepaari":
         payments = sum(c["amount"] for c in cash_entries if c["sub_type"] == "PAYMENT")
@@ -453,6 +484,7 @@ async def get_party_statement(
         "sales": sales,
         "cash_entries": cash_entries,
         "adjustments": party_adjustments,
+        "balance_transfers": party_transfers,
         "summary": {
             "total_sales": total_sales,
             "total_quantity": total_qty,
@@ -460,6 +492,8 @@ async def get_party_statement(
             "total_payments": payments,
             "total_deductions": deductions,
             "total_adjustments": adj_received + adj_paid,
+            "transfers_in": transfers_in,
+            "transfers_out": transfers_out,
             "opening_balance": party.get("opening_balance", 0)
         }
     }
@@ -521,6 +555,14 @@ async def export_party_statement(
             writer.writerow([a["date"], a["direction"], a["effect"], a["amount"], a.get("narration", "")])
         writer.writerow([])
     
+    # Balance Transfers
+    if statement.get("balance_transfers"):
+        writer.writerow(["=== BALANCE TRANSFERS ==="])
+        writer.writerow(["Date", "Direction", "Effect", "Amount", "Narration"])
+        for t in statement["balance_transfers"]:
+            writer.writerow([t["date"], t["direction"], t["effect"], t["amount"], t.get("narration", "")])
+        writer.writerow([])
+    
     # Summary
     writer.writerow(["=== SUMMARY ==="])
     writer.writerow(["Total Sales", statement["summary"]["total_sales"]])
@@ -529,6 +571,8 @@ async def export_party_statement(
     writer.writerow(["Total Payments", statement["summary"]["total_payments"]])
     writer.writerow(["Total Deductions", statement["summary"]["total_deductions"]])
     writer.writerow(["Total Adjustments (JV)", statement["summary"].get("total_adjustments", 0)])
+    writer.writerow(["Balance Transfers In", statement["summary"].get("transfers_in", 0)])
+    writer.writerow(["Balance Transfers Out", statement["summary"].get("transfers_out", 0)])
     
     output.seek(0)
     
@@ -936,6 +980,8 @@ async def transfer_balance(data: dict):
     to_party_id = data.get("to_party_id")  # Can be None if creating new
     to_party_name = data.get("to_party_name")  # For new party
     amount = float(data.get("amount", 0))
+    transfer_date = data.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
+    narration = data.get("narration", "")
     
     if not from_type or not from_party_id or not to_type or amount <= 0:
         raise HTTPException(status_code=400, detail="Invalid transfer data")
@@ -992,12 +1038,116 @@ async def transfer_balance(data: dict):
         to_name = to_party_name
         to_party_id = new_id
     
+    # CREATE A TRANSFER RECORD for audit trail
+    transfer_record = {
+        "id": str(uuid.uuid4()),
+        "date": transfer_date,
+        "from_type": from_type,
+        "from_party_id": from_party_id,
+        "from_party_name": from_party.get("name"),
+        "to_type": to_type,
+        "to_party_id": to_party_id,
+        "to_party_name": to_name,
+        "amount": amount,
+        "narration": narration,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    await db.balance_transfers.insert_one(transfer_record)
+    
     return {
         "status": "transferred",
         "from_party": from_party.get("name"),
         "to_party": to_name,
         "amount": amount,
-        "new_to_party_id": to_party_id
+        "new_to_party_id": to_party_id,
+        "transfer_id": transfer_record["id"]
+    }
+
+
+# ============== GET BALANCE TRANSFERS ==============
+@api_router.get("/balance-transfers")
+async def get_balance_transfers(
+    party_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Get all balance transfer records, optionally filtered by party"""
+    query = {}
+    
+    if party_id:
+        query["$or"] = [
+            {"from_party_id": party_id},
+            {"to_party_id": party_id}
+        ]
+    
+    if from_date and to_date:
+        query["date"] = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        query["date"] = {"$gte": from_date}
+    elif to_date:
+        query["date"] = {"$lte": to_date}
+    
+    transfers = await db.balance_transfers.find(query).sort("date", -1).to_list(1000)
+    return serialize_docs(transfers)
+
+
+@api_router.post("/balance-transfers/backfill")
+async def backfill_balance_transfer(data: dict):
+    """Create a transfer record for past transfers (audit trail backfill - does NOT modify balances)"""
+    from_type = data.get("from_type")
+    from_party_id = data.get("from_party_id")
+    to_type = data.get("to_type")
+    to_party_id = data.get("to_party_id")
+    amount = float(data.get("amount", 0))
+    transfer_date = data.get("date")
+    narration = data.get("narration", "Backfilled transfer record")
+    
+    if not from_type or not from_party_id or not to_type or not to_party_id or amount <= 0 or not transfer_date:
+        raise HTTPException(status_code=400, detail="All fields required: from_type, from_party_id, to_type, to_party_id, amount, date")
+    
+    # Map type to collection
+    type_to_collection = {
+        "BEPAARI": "bepaaris",
+        "DUKANDAR": "dukandars",
+        "ADVANCE": "advance_parties"
+    }
+    
+    from_coll = type_to_collection.get(from_type)
+    to_coll = type_to_collection.get(to_type)
+    
+    if not from_coll or not to_coll:
+        raise HTTPException(status_code=400, detail="Invalid party type")
+    
+    # Get party names
+    from_party = await db[from_coll].find_one({"id": from_party_id})
+    to_party = await db[to_coll].find_one({"id": to_party_id})
+    
+    if not from_party or not to_party:
+        raise HTTPException(status_code=404, detail="Party not found")
+    
+    # Create transfer record (does NOT modify balances - just creates audit trail)
+    transfer_record = {
+        "id": str(uuid.uuid4()),
+        "date": transfer_date,
+        "from_type": from_type,
+        "from_party_id": from_party_id,
+        "from_party_name": from_party.get("name"),
+        "to_type": to_type,
+        "to_party_id": to_party_id,
+        "to_party_name": to_party.get("name"),
+        "amount": amount,
+        "narration": narration,
+        "created_at": datetime.utcnow().isoformat(),
+        "is_backfill": True
+    }
+    await db.balance_transfers.insert_one(transfer_record)
+    
+    return {
+        "status": "backfilled",
+        "from_party": from_party.get("name"),
+        "to_party": to_party.get("name"),
+        "amount": amount,
+        "transfer_id": transfer_record["id"]
     }
 
 
