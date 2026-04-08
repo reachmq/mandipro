@@ -169,6 +169,9 @@ const CashBook = () => {
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "" });
+  const [sortBy, setSortBy] = useState("date-desc");
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [loading, setLoading] = useState(true);
 
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
@@ -205,7 +208,9 @@ const CashBook = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, [filters]);
+  useEffect(() => { fetchData(); }, []);
+
+  const applyFilters = () => { fetchData(); };
 
   const filteredParties = parties.filter(p => {
     if (form.type === "BEPAARI") return p.ptype === "BEPAARI";
@@ -227,6 +232,41 @@ const CashBook = () => {
   };
 
   const handleDelete = async (id) => { if (window.confirm("Delete?")) { await axios.delete(`${API}/cash-book/${id}`); fetchData(); } };
+
+  const handleEdit = (entry) => {
+    setEditItem(entry);
+    setEditForm({
+      date: entry.date,
+      type: entry.type,
+      sub_type: entry.sub_type,
+      party_id: entry.party_id || "",
+      amount: entry.amount,
+      bf_disc: entry.bf_disc || 0,
+      mode: entry.mode,
+      particulars: entry.particulars || ""
+    });
+  };
+
+  const handleEditSave = async () => {
+    await axios.put(`${API}/cash-book/${editItem.id}`, {
+      ...editForm,
+      amount: parseFloat(editForm.amount),
+      bf_disc: editForm.bf_disc ? parseFloat(editForm.bf_disc) : 0
+    });
+    setEditItem(null);
+    fetchData();
+  };
+
+  // Sorting
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (sortBy === "date-desc") return b.date.localeCompare(a.date);
+    if (sortBy === "date-asc") return a.date.localeCompare(b.date);
+    if (sortBy === "party-asc") return (a.party_name || "").localeCompare(b.party_name || "");
+    if (sortBy === "party-desc") return (b.party_name || "").localeCompare(a.party_name || "");
+    if (sortBy === "amount-desc") return b.amount - a.amount;
+    if (sortBy === "amount-asc") return a.amount - b.amount;
+    return 0;
+  });
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
@@ -282,25 +322,63 @@ const CashBook = () => {
           <option value="">All Types</option>
           {types.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button className="btn-clear" onClick={() => setFilters({ fromDate: "", toDate: "", type: "" })}>Clear</button>
+        <button className="btn-primary" onClick={applyFilters}>Search</button>
+        <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "" }); fetchData(); }}>Clear</button>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
+          <option value="date-desc">Date (Newest)</option>
+          <option value="date-asc">Date (Oldest)</option>
+          <option value="party-asc">Party (A-Z)</option>
+          <option value="party-desc">Party (Z-A)</option>
+          <option value="amount-desc">Amount (High-Low)</option>
+          <option value="amount-asc">Amount (Low-High)</option>
+        </select>
       </div>
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>BF Disc</th><th>Mode</th><th>Comments</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>BF Disc</th><th>Mode</th><th>Comments</th><th>Actions</th></tr></thead>
           <tbody>
-            {entries.map((e) => (
+            {sortedEntries.map((e) => (
               <tr key={e.id}>
                 <td>{e.date}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
                 <td>{formatCurrency(e.amount)}</td>
                 <td className="bf-disc-col">{e.bf_disc > 0 ? formatCurrency(e.bf_disc) : "-"}</td>
                 <td>{e.mode}</td><td className="comments-col">{e.particulars || "-"}</td>
-                <td><button className="btn-delete" onClick={() => handleDelete(e.id)}>X</button></td>
+                <td>
+                  <button className="btn-edit" onClick={() => handleEdit(e)}>Edit</button>
+                  <button className="btn-delete" onClick={() => handleDelete(e.id)}>X</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="modal-overlay" onClick={() => setEditItem(null)}>
+          <div className="modal-content" onClick={(ev) => ev.stopPropagation()}>
+            <h3>Edit Cash Book Entry</h3>
+            <div className="edit-form">
+              <label>Date:<input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /></label>
+              <label>Amount:<input type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} /></label>
+              {editForm.type === "DUKANDAR" && editForm.sub_type === "RECEIPT" && (
+                <label>BF Disc:<input type="number" value={editForm.bf_disc} onChange={(e) => setEditForm({ ...editForm, bf_disc: e.target.value })} /></label>
+              )}
+              <label>Mode:
+                <select value={editForm.mode} onChange={(e) => setEditForm({ ...editForm, mode: e.target.value })}>
+                  {["CASH", "BANK", "UPI", "TRANSFER"].map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              <label>Comments:<input type="text" value={editForm.particulars} onChange={(e) => setEditForm({ ...editForm, particulars: e.target.value })} /></label>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleEditSave}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -321,6 +399,9 @@ const Adjustments = () => {
     amount: "",
     narration: ""
   });
+  const [sortBy, setSortBy] = useState("date-desc");
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -382,6 +463,33 @@ const Adjustments = () => {
     }
   };
 
+  const handleEdit = (adj) => {
+    setEditItem(adj);
+    setEditForm({
+      date: adj.date,
+      amount: adj.amount,
+      narration: adj.narration || ""
+    });
+  };
+
+  const handleEditSave = async () => {
+    await axios.put(`${API}/adjustments/${editItem.id}`, {
+      ...editForm,
+      amount: parseFloat(editForm.amount)
+    });
+    setEditItem(null);
+    fetchData();
+  };
+
+  // Sorting
+  const sortedAdjustments = [...adjustments].sort((a, b) => {
+    if (sortBy === "date-desc") return b.date.localeCompare(a.date);
+    if (sortBy === "date-asc") return a.date.localeCompare(b.date);
+    if (sortBy === "amount-desc") return b.amount - a.amount;
+    if (sortBy === "amount-asc") return a.amount - b.amount;
+    return 0;
+  });
+
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
@@ -433,27 +541,39 @@ const Adjustments = () => {
         <button type="submit" className="btn-primary">Add Adjustment</button>
       </form>
 
+      <div className="filter-bar">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
+          <option value="date-desc">Date (Newest)</option>
+          <option value="date-asc">Date (Oldest)</option>
+          <option value="amount-desc">Amount (High-Low)</option>
+          <option value="amount-asc">Amount (Low-High)</option>
+        </select>
+      </div>
+
       <div className="table-container">
         <table>
           <thead>
             <tr>
               <th>Date</th>
-              <th>Debit (Payable ↓)</th>
-              <th>Credit (Receivable ↓)</th>
+              <th>Debit (Who Paid)</th>
+              <th>Credit (Who Received)</th>
               <th>Amount</th>
               <th>Narration</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {adjustments.map((a) => (
+            {sortedAdjustments.map((a) => (
               <tr key={a.id}>
                 <td>{a.date}</td>
                 <td><span className="badge debit">{a.debit_type}</span> {a.debit_party_name}</td>
                 <td><span className="badge credit">{a.credit_type}</span> {a.credit_party_name}</td>
                 <td>{formatCurrency(a.amount)}</td>
                 <td>{a.narration || "-"}</td>
-                <td><button className="btn-delete" onClick={() => handleDelete(a.id)}>X</button></td>
+                <td>
+                  <button className="btn-edit" onClick={() => handleEdit(a)}>Edit</button>
+                  <button className="btn-delete" onClick={() => handleDelete(a.id)}>X</button>
+                </td>
               </tr>
             ))}
             {adjustments.length === 0 && (
@@ -462,6 +582,24 @@ const Adjustments = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="modal-overlay" onClick={() => setEditItem(null)}>
+          <div className="modal-content" onClick={(ev) => ev.stopPropagation()}>
+            <h3>Edit Adjustment</h3>
+            <div className="edit-form">
+              <label>Date:<input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /></label>
+              <label>Amount:<input type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} /></label>
+              <label>Narration:<input type="text" value={editForm.narration} onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })} /></label>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleEditSave}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

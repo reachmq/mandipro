@@ -130,6 +130,16 @@ async def create_advance_party(data: MasterCreate):
     await db.advance_parties.insert_one(doc)
     return {"id": party.id, "name": party.name}
 
+@api_router.put("/advance-parties/{party_id}")
+async def update_advance_party(party_id: str, data: dict):
+    update_fields = {}
+    if "name" in data:
+        update_fields["name"] = data["name"]
+    if "opening_balance" in data:
+        update_fields["opening_balance"] = data["opening_balance"]
+    await db.advance_parties.update_one({"id": party_id}, {"$set": update_fields})
+    return {"status": "updated"}
+
 @api_router.delete("/advance-parties/{party_id}")
 async def delete_advance_party(party_id: str):
     await db.advance_parties.update_one({"id": party_id}, {"$set": {"is_active": False}})
@@ -153,6 +163,18 @@ async def create_capital_partner(data: MasterCreate):
     doc["created_at"] = datetime.utcnow().isoformat()
     await db.capital_partners.insert_one(doc)
     return {"id": partner.id, "name": partner.name}
+
+@api_router.put("/capital-partners/{partner_id}")
+async def update_capital_partner(partner_id: str, data: dict):
+    update_fields = {}
+    if "name" in data:
+        update_fields["name"] = data["name"]
+    if "opening_balance" in data:
+        update_fields["opening_balance"] = data["opening_balance"]
+    if "partner_type" in data:
+        update_fields["partner_type"] = data["partner_type"]
+    await db.capital_partners.update_one({"id": partner_id}, {"$set": update_fields})
+    return {"status": "updated"}
 
 @api_router.delete("/capital-partners/{partner_id}")
 async def delete_capital_partner(partner_id: str):
@@ -278,6 +300,24 @@ async def create_cash_book_entry(data: CashBookEntryCreate):
 async def delete_cash_book_entry(entry_id: str):
     await db.cash_book.delete_one({"id": entry_id})
     return {"status": "deleted"}
+
+@api_router.put("/cash-book/{entry_id}")
+async def update_cash_book_entry(entry_id: str, data: dict):
+    update_fields = {}
+    for field in ["date", "type", "sub_type", "party_id", "amount", "bf_disc", "mode", "particulars"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    # Update party_name if party_id changed
+    if "party_id" in data and data["party_id"]:
+        for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+            party = await db[coll].find_one({"id": data["party_id"]})
+            if party:
+                update_fields["party_name"] = party.get("name")
+                break
+    
+    await db.cash_book.update_one({"id": entry_id}, {"$set": update_fields})
+    return {"status": "updated"}
 
 
 # ============== PARTY STATEMENT (FOR DISPUTES) ==============
@@ -751,6 +791,36 @@ async def delete_adjustment(adjustment_id: str):
     """Delete an adjustment entry"""
     await db.adjustments.delete_one({"id": adjustment_id})
     return {"status": "deleted"}
+
+@api_router.put("/adjustments/{adjustment_id}")
+async def update_adjustment(adjustment_id: str, data: dict):
+    """Update an adjustment entry"""
+    update_fields = {}
+    for field in ["date", "amount", "narration"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    # Update party info if changed
+    if "debit_party_id" in data:
+        update_fields["debit_party_id"] = data["debit_party_id"]
+        update_fields["debit_type"] = data.get("debit_type", "")
+        for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+            party = await db[coll].find_one({"id": data["debit_party_id"]})
+            if party:
+                update_fields["debit_party_name"] = party.get("name")
+                break
+    
+    if "credit_party_id" in data:
+        update_fields["credit_party_id"] = data["credit_party_id"]
+        update_fields["credit_type"] = data.get("credit_type", "")
+        for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+            party = await db[coll].find_one({"id": data["credit_party_id"]})
+            if party:
+                update_fields["credit_party_name"] = party.get("name")
+                break
+    
+    await db.adjustments.update_one({"id": adjustment_id}, {"$set": update_fields})
+    return {"status": "updated"}
 
 
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
