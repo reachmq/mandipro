@@ -823,6 +823,112 @@ async def update_adjustment(adjustment_id: str, data: dict):
     return {"status": "updated"}
 
 
+# ============== BALANCE TRANSFER ==============
+@api_router.post("/balance-transfer")
+async def transfer_balance(data: dict):
+    """Transfer balance from one party to another (corrects opening balances)"""
+    from_type = data.get("from_type")  # BEPAARI, DUKANDAR, etc.
+    from_party_id = data.get("from_party_id")
+    to_type = data.get("to_type")
+    to_party_id = data.get("to_party_id")  # Can be None if creating new
+    to_party_name = data.get("to_party_name")  # For new party
+    amount = float(data.get("amount", 0))
+    
+    if not from_type or not from_party_id or not to_type or amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid transfer data")
+    
+    # Map type to collection
+    type_to_collection = {
+        "BEPAARI": "bepaaris",
+        "DUKANDAR": "dukandars",
+        "ADVANCE": "advance_parties"
+    }
+    
+    from_coll = type_to_collection.get(from_type)
+    to_coll = type_to_collection.get(to_type)
+    
+    if not from_coll or not to_coll:
+        raise HTTPException(status_code=400, detail="Invalid party type")
+    
+    # Get source party
+    from_party = await db[from_coll].find_one({"id": from_party_id})
+    if not from_party:
+        raise HTTPException(status_code=404, detail="Source party not found")
+    
+    # Reduce source party's opening balance
+    new_from_balance = from_party.get("opening_balance", 0) - amount
+    await db[from_coll].update_one({"id": from_party_id}, {"$set": {"opening_balance": new_from_balance}})
+    
+    # Handle destination party
+    if to_party_id:
+        # Existing party - increase their opening balance
+        to_party = await db[to_coll].find_one({"id": to_party_id})
+        if not to_party:
+            raise HTTPException(status_code=404, detail="Destination party not found")
+        new_to_balance = to_party.get("opening_balance", 0) + amount
+        await db[to_coll].update_one({"id": to_party_id}, {"$set": {"opening_balance": new_to_balance}})
+        to_name = to_party.get("name")
+    else:
+        # Create new party with the transfer amount as opening balance
+        if not to_party_name:
+            raise HTTPException(status_code=400, detail="New party name required")
+        
+        new_id = str(uuid.uuid4())
+        new_party = {
+            "id": new_id,
+            "name": to_party_name,
+            "opening_balance": amount,
+            "is_active": True,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        if to_type == "BEPAARI":
+            new_party["commission_percent"] = 4.0
+        
+        await db[to_coll].insert_one(new_party)
+        to_name = to_party_name
+        to_party_id = new_id
+    
+    return {
+        "status": "transferred",
+        "from_party": from_party.get("name"),
+        "to_party": to_name,
+        "amount": amount,
+        "new_to_party_id": to_party_id
+    }
+
+
+@api_router.put("/cash-book/reassign")
+async def reassign_cash_book_entries(data: dict):
+    """Reassign cash book entries from one party to another"""
+    entry_ids = data.get("entry_ids", [])
+    new_party_id = data.get("new_party_id")
+    new_party_type = data.get("new_party_type")
+    
+    if not entry_ids or not new_party_id:
+        raise HTTPException(status_code=400, detail="Invalid reassignment data")
+    
+    # Get new party name
+    new_party_name = None
+    for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+        party = await db[coll].find_one({"id": new_party_id})
+        if party:
+            new_party_name = party.get("name")
+            break
+    
+    if not new_party_name:
+        raise HTTPException(status_code=404, detail="New party not found")
+    
+    # Update all specified entries
+    for entry_id in entry_ids:
+        await db.cash_book.update_one(
+            {"id": entry_id},
+            {"$set": {"party_id": new_party_id, "party_name": new_party_name}}
+        )
+    
+    return {"status": "reassigned", "count": len(entry_ids)}
+
+
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
 @api_router.get("/bepaari-aakda")
 async def get_bepaari_aakda(date: str):

@@ -17,6 +17,7 @@ const Sidebar = () => {
     { path: "/daily-sales", label: "Daily Sales", icon: "🐐" },
     { path: "/cash-book", label: "Cash Book", icon: "💰" },
     { path: "/adjustments", label: "Adjustments (JV)", icon: "🔄" },
+    { path: "/balance-transfer", label: "Balance Transfer", icon: "↔️" },
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
     { path: "/dukandar-ledger", label: "Dukandar Ledger", icon: "📗" },
     { path: "/balance-sheet", label: "Balance Sheet", icon: "📑" },
@@ -604,6 +605,199 @@ const Adjustments = () => {
   );
 };
 
+// ============== BALANCE TRANSFER ==============
+const BalanceTransfer = () => {
+  const [bepaaris, setBeparis] = useState([]);
+  const [dukandars, setDukandars] = useState([]);
+  const [advanceParties, setAdvanceParties] = useState([]);
+  const [cashBookEntries, setCashBookEntries] = useState([]);
+  const [form, setForm] = useState({
+    from_type: "DUKANDAR",
+    from_party_id: "",
+    to_type: "DUKANDAR",
+    to_party_id: "",
+    to_party_name: "",
+    amount: "",
+    create_new: false
+  });
+  const [selectedEntries, setSelectedEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState(null);
+
+  const fetchData = async () => {
+    try {
+      const [bRes, dRes, aRes] = await Promise.all([
+        axios.get(`${API}/bepaaris`),
+        axios.get(`${API}/dukandars`),
+        axios.get(`${API}/advance-parties`)
+      ]);
+      setBeparis(bRes.data);
+      setDukandars(dRes.data);
+      setAdvanceParties(aRes.data);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // Fetch cash book entries when source party changes
+  useEffect(() => {
+    if (form.from_party_id) {
+      axios.get(`${API}/cash-book`).then(res => {
+        const filtered = res.data.filter(e => e.party_id === form.from_party_id);
+        setCashBookEntries(filtered);
+      });
+    } else {
+      setCashBookEntries([]);
+    }
+    setSelectedEntries([]);
+  }, [form.from_party_id]);
+
+  const getParties = (type) => {
+    if (type === "BEPAARI") return bepaaris;
+    if (type === "DUKANDAR") return dukandars;
+    if (type === "ADVANCE") return advanceParties;
+    return [];
+  };
+
+  const getSourcePartyBalance = () => {
+    const parties = getParties(form.from_type);
+    const party = parties.find(p => p.id === form.from_party_id);
+    return party?.opening_balance || 0;
+  };
+
+  const handleTransfer = async () => {
+    if (!form.from_party_id || !form.amount) {
+      alert("Please select source party and enter amount");
+      return;
+    }
+    if (!form.create_new && !form.to_party_id) {
+      alert("Please select destination party or check 'Create New'");
+      return;
+    }
+    if (form.create_new && !form.to_party_name) {
+      alert("Please enter name for new party");
+      return;
+    }
+
+    try {
+      // Step 1: Transfer balance
+      const transferRes = await axios.post(`${API}/balance-transfer`, {
+        from_type: form.from_type,
+        from_party_id: form.from_party_id,
+        to_type: form.to_type,
+        to_party_id: form.create_new ? null : form.to_party_id,
+        to_party_name: form.create_new ? form.to_party_name : null,
+        amount: parseFloat(form.amount)
+      });
+
+      // Step 2: Reassign selected cash book entries
+      if (selectedEntries.length > 0) {
+        await axios.put(`${API}/cash-book/reassign`, {
+          entry_ids: selectedEntries,
+          new_party_id: transferRes.data.new_to_party_id || form.to_party_id,
+          new_party_type: form.to_type
+        });
+      }
+
+      setMessage(`✅ Transferred ₹${formatCurrency(form.amount)} from ${transferRes.data.from_party} to ${transferRes.data.to_party}. ${selectedEntries.length > 0 ? `Also moved ${selectedEntries.length} cash book entries.` : ''}`);
+      
+      // Reset form
+      setForm({ ...form, from_party_id: "", to_party_id: "", to_party_name: "", amount: "", create_new: false });
+      setSelectedEntries([]);
+      fetchData();
+    } catch (err) {
+      alert("Error: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const toggleEntry = (id) => {
+    setSelectedEntries(prev => 
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
+  if (loading) return <div className="loading">Loading...</div>;
+
+  return (
+    <div className="page">
+      <h2>Balance Transfer</h2>
+      <p className="hint">Transfer opening balance from one party to another. Use this to correct party splits or move balances to new parties.</p>
+
+      {message && <div className="success-message">{message}</div>}
+
+      <div className="transfer-container">
+        <div className="transfer-section from-section">
+          <h3>FROM (Source Party)</h3>
+          <select value={form.from_type} onChange={(e) => setForm({ ...form, from_type: e.target.value, from_party_id: "" })}>
+            <option value="DUKANDAR">Dukandar</option>
+            <option value="BEPAARI">Bepaari</option>
+            <option value="ADVANCE">Advance Party</option>
+          </select>
+          <select value={form.from_party_id} onChange={(e) => setForm({ ...form, from_party_id: e.target.value })}>
+            <option value="">Select Party</option>
+            {getParties(form.from_type).map(p => (
+              <option key={p.id} value={p.id}>{p.name} (₹{p.opening_balance?.toLocaleString() || 0})</option>
+            ))}
+          </select>
+          {form.from_party_id && (
+            <div className="balance-info">Current Opening Balance: <strong>₹{getSourcePartyBalance().toLocaleString()}</strong></div>
+          )}
+        </div>
+
+        <div className="transfer-arrow">→</div>
+
+        <div className="transfer-section to-section">
+          <h3>TO (Destination Party)</h3>
+          <select value={form.to_type} onChange={(e) => setForm({ ...form, to_type: e.target.value, to_party_id: "" })}>
+            <option value="DUKANDAR">Dukandar</option>
+            <option value="BEPAARI">Bepaari</option>
+            <option value="ADVANCE">Advance Party</option>
+          </select>
+          
+          <label className="checkbox-label">
+            <input type="checkbox" checked={form.create_new} onChange={(e) => setForm({ ...form, create_new: e.target.checked, to_party_id: "" })} />
+            Create New Party
+          </label>
+
+          {form.create_new ? (
+            <input type="text" placeholder="New Party Name" value={form.to_party_name} onChange={(e) => setForm({ ...form, to_party_name: e.target.value })} />
+          ) : (
+            <select value={form.to_party_id} onChange={(e) => setForm({ ...form, to_party_id: e.target.value })}>
+              <option value="">Select Existing Party</option>
+              {getParties(form.to_type).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+
+      <div className="amount-section">
+        <label>Amount to Transfer:</label>
+        <input type="number" placeholder="Enter amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="amount-input" />
+      </div>
+
+      {cashBookEntries.length > 0 && (
+        <div className="entries-section">
+          <h3>Also Move These Cash Book Entries? (Optional)</h3>
+          <p className="hint">Select entries that should be reassigned to the destination party</p>
+          <div className="entries-list">
+            {cashBookEntries.map(e => (
+              <label key={e.id} className="entry-checkbox">
+                <input type="checkbox" checked={selectedEntries.includes(e.id)} onChange={() => toggleEntry(e.id)} />
+                <span>{e.date} | {e.sub_type} | ₹{e.amount.toLocaleString()} | {e.mode}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button className="btn-primary btn-transfer" onClick={handleTransfer}>Transfer Balance</button>
+    </div>
+  );
+};
+
 // ============== PARTY STATEMENT (NEW!) ==============
 const PartyStatement = () => {
   const [bepaaris, setBeparis] = useState([]);
@@ -1111,6 +1305,7 @@ function App() {
             <Route path="/daily-sales" element={<DailySales />} />
             <Route path="/cash-book" element={<CashBook />} />
             <Route path="/adjustments" element={<Adjustments />} />
+            <Route path="/balance-transfer" element={<BalanceTransfer />} />
             <Route path="/bepaari-ledger" element={<BepariLedger />} />
             <Route path="/dukandar-ledger" element={<DukandarLedger />} />
             <Route path="/balance-sheet" element={<BalanceSheet />} />
