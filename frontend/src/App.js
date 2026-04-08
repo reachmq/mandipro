@@ -77,6 +77,8 @@ const DailySales = () => {
   const [dukandars, setDukandars] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", bepaari_id: "", dukandar_id: "" });
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -107,6 +109,29 @@ const DailySales = () => {
   };
 
   const handleDelete = async (id) => { if (window.confirm("Delete?")) { await axios.delete(`${API}/daily-sales/${id}`); fetchData(); } };
+
+  const handleEdit = (sale) => {
+    setEditItem(sale);
+    setEditForm({
+      date: sale.date,
+      bepaari_id: sale.bepaari_id,
+      dukandar_id: sale.dukandar_id,
+      quantity: sale.quantity,
+      rate: sale.rate,
+      discount: sale.discount || 0
+    });
+  };
+
+  const handleEditSave = async () => {
+    await axios.put(`${API}/daily-sales/${editItem.id}`, {
+      ...editForm,
+      quantity: parseInt(editForm.quantity),
+      rate: parseFloat(editForm.rate),
+      discount: parseFloat(editForm.discount || 0)
+    });
+    setEditItem(null);
+    fetchData();
+  };
 
   const clearFilters = () => setFilters({ fromDate: "", toDate: "", bepaari_id: "", dukandar_id: "" });
 
@@ -148,18 +173,50 @@ const DailySales = () => {
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Actions</th></tr></thead>
           <tbody>
             {sales.map((s) => (
               <tr key={s.id}>
                 <td>{s.date}</td><td>{s.bepaari_name}</td><td>{s.dukandar_name}</td><td>{s.quantity}</td>
                 <td>{formatCurrency(s.rate)}</td><td>{formatCurrency(s.gross_amount)}</td><td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
-                <td><button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button></td>
+                <td>
+                  <button className="btn-edit" onClick={() => handleEdit(s)}>Edit</button>
+                  <button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="modal-overlay" onClick={() => setEditItem(null)}>
+          <div className="modal-content" onClick={(ev) => ev.stopPropagation()}>
+            <h3>Edit Sale</h3>
+            <div className="edit-form">
+              <label>Date:<input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /></label>
+              <label>Bepaari:
+                <select value={editForm.bepaari_id} onChange={(e) => setEditForm({ ...editForm, bepaari_id: e.target.value })}>
+                  {bepaaris.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </label>
+              <label>Dukandar:
+                <select value={editForm.dukandar_id} onChange={(e) => setEditForm({ ...editForm, dukandar_id: e.target.value })}>
+                  {dukandars.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+              <label>Qty:<input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} /></label>
+              <label>Rate:<input type="number" value={editForm.rate} onChange={(e) => setEditForm({ ...editForm, rate: e.target.value })} /></label>
+              <label>Discount:<input type="number" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} /></label>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleEditSave}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -910,6 +967,7 @@ const PartyStatement = () => {
 const BepariLedger = () => {
   const [ledger, setLedger] = useState([]);
   const [asOnDate, setAsOnDate] = useState("");
+  const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -922,6 +980,15 @@ const BepariLedger = () => {
   useEffect(() => { fetchData(); }, [asOnDate]);
 
   if (loading) return <div className="loading">Loading...</div>;
+
+  // Sorting
+  const sortedLedger = [...ledger].filter(b => b.gross_sales > 0 || b.opening > 0 || b.balance !== 0).sort((a, b) => {
+    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    if (sortBy === "balance-desc") return b.balance - a.balance;
+    if (sortBy === "balance-asc") return a.balance - b.balance;
+    return 0;
+  });
 
   const totals = ledger.reduce((acc, b) => ({
     gross: acc.gross + b.gross_sales, qty: acc.qty + b.quantity, comm: acc.comm + b.commission,
@@ -936,12 +1003,22 @@ const BepariLedger = () => {
         <label>As On Date:</label>
         <input type="date" value={asOnDate} onChange={(e) => setAsOnDate(e.target.value)} />
         {asOnDate && <button className="btn-clear" onClick={() => setAsOnDate("")}>Show Current</button>}
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
+          <option value="name-asc">Name (A-Z)</option>
+          <option value="name-desc">Name (Z-A)</option>
+          <option value="balance-desc">Balance (High-Low)</option>
+          <option value="balance-asc">Balance (Low-High)</option>
+        </select>
       </div>
       <div className="table-container">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Adj</th><th>Balance</th></tr></thead>
+          <thead><tr>
+            <th className="sortable" onClick={() => setSortBy(sortBy === "name-asc" ? "name-desc" : "name-asc")}>Name {sortBy.startsWith("name") ? (sortBy === "name-asc" ? "↑" : "↓") : ""}</th>
+            <th>Phone</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Adj</th>
+            <th className="sortable" onClick={() => setSortBy(sortBy === "balance-desc" ? "balance-asc" : "balance-desc")}>Balance {sortBy.startsWith("balance") ? (sortBy === "balance-desc" ? "↓" : "↑") : ""}</th>
+          </tr></thead>
           <tbody>
-            {ledger.filter(b => b.gross_sales > 0 || b.opening > 0 || b.balance !== 0).map((b) => (
+            {sortedLedger.map((b) => (
               <tr key={b.id}>
                 <td><strong>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
                 <td>{b.quantity}</td><td>{formatCurrency(b.commission)}</td><td>{formatCurrency(b.kk)}</td><td>{formatCurrency(b.jb)}</td>
@@ -967,6 +1044,7 @@ const BepariLedger = () => {
 const DukandarLedger = () => {
   const [ledger, setLedger] = useState([]);
   const [asOnDate, setAsOnDate] = useState("");
+  const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -980,6 +1058,15 @@ const DukandarLedger = () => {
 
   if (loading) return <div className="loading">Loading...</div>;
 
+  // Sorting
+  const sortedLedger = [...ledger].filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).sort((a, b) => {
+    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    if (sortBy === "balance-desc") return b.balance - a.balance;
+    if (sortBy === "balance-asc") return a.balance - b.balance;
+    return 0;
+  });
+
   const totals = ledger.reduce((acc, d) => ({
     purchases: acc.purchases + d.purchases, discounts: acc.discounts + d.discounts, 
     receipts: acc.receipts + d.receipts, bf_disc: acc.bf_disc + (d.bf_disc || 0), adj: acc.adj + (d.adjustments || 0), balance: acc.balance + d.balance
@@ -992,12 +1079,22 @@ const DukandarLedger = () => {
         <label>As On Date:</label>
         <input type="date" value={asOnDate} onChange={(e) => setAsOnDate(e.target.value)} />
         {asOnDate && <button className="btn-clear" onClick={() => setAsOnDate("")}>Show Current</button>}
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
+          <option value="name-asc">Name (A-Z)</option>
+          <option value="name-desc">Name (Z-A)</option>
+          <option value="balance-desc">Balance (High-Low)</option>
+          <option value="balance-asc">Balance (Low-High)</option>
+        </select>
       </div>
       <div className="table-container">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Recv</th><th>Receipts</th><th>BF Disc</th><th>Adj</th><th>Balance</th></tr></thead>
+          <thead><tr>
+            <th className="sortable" onClick={() => setSortBy(sortBy === "name-asc" ? "name-desc" : "name-asc")}>Name {sortBy.startsWith("name") ? (sortBy === "name-asc" ? "↑" : "↓") : ""}</th>
+            <th>Phone</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Net Recv</th><th>Receipts</th><th>BF Disc</th><th>Adj</th>
+            <th className="sortable" onClick={() => setSortBy(sortBy === "balance-desc" ? "balance-asc" : "balance-desc")}>Balance {sortBy.startsWith("balance") ? (sortBy === "balance-desc" ? "↓" : "↑") : ""}</th>
+          </tr></thead>
           <tbody>
-            {ledger.filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).map((d) => (
+            {sortedLedger.map((d) => (
               <tr key={d.id}>
                 <td><strong>{d.name}</strong></td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>

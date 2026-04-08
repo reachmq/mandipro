@@ -242,6 +242,39 @@ async def delete_daily_sale(sale_id: str):
     await db.daily_sales.delete_one({"id": sale_id})
     return {"status": "deleted"}
 
+@api_router.put("/daily-sales/{sale_id}")
+async def update_daily_sale(sale_id: str, data: dict):
+    update_fields = {}
+    
+    for field in ["date", "quantity", "rate", "discount"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    # Recalculate amounts if qty/rate/discount changed
+    if "quantity" in data or "rate" in data or "discount" in data:
+        sale = await db.daily_sales.find_one({"id": sale_id})
+        qty = data.get("quantity", sale.get("quantity", 0))
+        rate = data.get("rate", sale.get("rate", 0))
+        discount = data.get("discount", sale.get("discount", 0))
+        update_fields["gross_amount"] = qty * rate
+        update_fields["net_amount"] = (qty * rate) - discount
+    
+    # Update bepaari/dukandar if changed
+    if "bepaari_id" in data:
+        update_fields["bepaari_id"] = data["bepaari_id"]
+        bepaari = await db.bepaaris.find_one({"id": data["bepaari_id"]})
+        if bepaari:
+            update_fields["bepaari_name"] = bepaari.get("name")
+    
+    if "dukandar_id" in data:
+        update_fields["dukandar_id"] = data["dukandar_id"]
+        dukandar = await db.dukandars.find_one({"id": data["dukandar_id"]})
+        if dukandar:
+            update_fields["dukandar_name"] = dukandar.get("name")
+    
+    await db.daily_sales.update_one({"id": sale_id}, {"$set": update_fields})
+    return {"status": "updated"}
+
 
 # ============== CASH BOOK ==============
 @api_router.get("/cash-book")

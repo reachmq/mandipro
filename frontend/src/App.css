@@ -1031,3 +1031,14 @@ tr:hover {
   margin-bottom: 20px;
   font-weight: 500;
 }
+
+
+/* Sortable headers */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  background: #edf2f7;
+}
