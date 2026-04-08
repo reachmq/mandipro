@@ -950,11 +950,35 @@ const PartyStatement = () => {
             </table>
           </div>
 
+          {/* NEW: Adjustments (JV) Section */}
+          {statement.adjustments && statement.adjustments.length > 0 && (
+            <div className="statement-section">
+              <h4>Adjustments / JV ({statement.adjustments.length} entries)</h4>
+              <table>
+                <thead><tr><th>Date</th><th>Direction</th><th>Effect</th><th>Amount</th><th>Narration</th></tr></thead>
+                <tbody>
+                  {statement.adjustments.map((a, i) => (
+                    <tr key={i} className={a.direction === "CREDIT" ? "credit-row" : "debit-row"}>
+                      <td>{a.date}</td>
+                      <td><span className={`badge ${a.direction.toLowerCase()}`}>{a.direction}</span></td>
+                      <td>{a.effect}</td>
+                      <td>{formatCurrency(a.amount)}</td>
+                      <td>{a.narration || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="summary-box">
             <h4>Summary</h4>
             <p>Total Sales: {formatCurrency(statement.summary.total_sales)} ({statement.summary.total_quantity} qty)</p>
             <p>Total Discount: {formatCurrency(statement.summary.total_discount)}</p>
             <p>Total {partyType === "bepaari" ? "Payments" : "Receipts"}: {formatCurrency(statement.summary.total_payments)}</p>
+            {statement.summary.total_adjustments > 0 && (
+              <p>Total Adjustments (JV): {formatCurrency(statement.summary.total_adjustments)}</p>
+            )}
             <p>Opening Balance: {formatCurrency(statement.summary.opening_balance)}</p>
           </div>
         </div>
@@ -1154,15 +1178,51 @@ const BalanceSheet = () => {
           <h3>LIABILITIES</h3>
           <table>
             <tbody>
-              <tr><td>Capital</td><td>{formatCurrency(L.capital)}</td></tr>
-              <tr><td>Loans</td><td>{formatCurrency(L.loans)}</td></tr>
-              <tr><td>Amanat</td><td>{formatCurrency(L.amanat)}</td></tr>
+              {/* Capital - Individual names */}
+              {L.capital_list && L.capital_list.length > 0 ? (
+                <>
+                  <tr className="section-header"><td colSpan="2"><strong>Capital</strong></td></tr>
+                  {L.capital_list.map((p, i) => (
+                    <tr key={i} className="sub-item"><td>&nbsp;&nbsp;{p.name}</td><td>{formatCurrency(p.amount)}</td></tr>
+                  ))}
+                  {L.capital_list.length > 1 && <tr className="sub-total"><td>&nbsp;&nbsp;<em>Total Capital</em></td><td><em>{formatCurrency(L.capital)}</em></td></tr>}
+                </>
+              ) : (
+                <tr><td>Capital</td><td>{formatCurrency(L.capital)}</td></tr>
+              )}
+              
+              {/* Loans - Individual names */}
+              {L.loans_list && L.loans_list.length > 0 ? (
+                <>
+                  <tr className="section-header"><td colSpan="2"><strong>Loans</strong></td></tr>
+                  {L.loans_list.map((p, i) => (
+                    <tr key={i} className="sub-item"><td>&nbsp;&nbsp;{p.name}</td><td>{formatCurrency(p.amount)}</td></tr>
+                  ))}
+                  {L.loans_list.length > 1 && <tr className="sub-total"><td>&nbsp;&nbsp;<em>Total Loans</em></td><td><em>{formatCurrency(L.loans)}</em></td></tr>}
+                </>
+              ) : L.loans > 0 ? (
+                <tr><td>Loans</td><td>{formatCurrency(L.loans)}</td></tr>
+              ) : null}
+              
+              {/* Amanat - Individual names */}
+              {L.amanat_list && L.amanat_list.length > 0 ? (
+                <>
+                  <tr className="section-header"><td colSpan="2"><strong>Amanat</strong></td></tr>
+                  {L.amanat_list.map((p, i) => (
+                    <tr key={i} className="sub-item"><td>&nbsp;&nbsp;{p.name}</td><td>{formatCurrency(p.amount)}</td></tr>
+                  ))}
+                  {L.amanat_list.length > 1 && <tr className="sub-total"><td>&nbsp;&nbsp;<em>Total Amanat</em></td><td><em>{formatCurrency(L.amanat)}</em></td></tr>}
+                </>
+              ) : L.amanat > 0 ? (
+                <tr><td>Amanat</td><td>{formatCurrency(L.amanat)}</td></tr>
+              ) : null}
+              
               <tr><td>Bepaari Payables</td><td>{formatCurrency(L.bepaari_payables)}</td></tr>
-              <tr><td>Dukandar Advances</td><td>{formatCurrency(L.dukandar_advances)}</td></tr>
+              {L.dukandar_advances > 0 && <tr><td>Dukandar Advances</td><td>{formatCurrency(L.dukandar_advances)}</td></tr>}
               <tr className="sub-item"><td>JB Total</td><td>{formatCurrency(L.jb.total)}</td></tr>
               <tr className="sub-item"><td>KK Total</td><td>{formatCurrency(L.kk.total)}</td></tr>
               <tr className="sub-item"><td>Commission Total</td><td>{formatCurrency(L.commission.total)}</td></tr>
-              <tr><td>Zakat Payable</td><td>{formatCurrency(L.zakat)}</td></tr>
+              {L.zakat > 0 && <tr><td>Zakat Payable</td><td>{formatCurrency(L.zakat)}</td></tr>}
               <tr className="total-row"><td><strong>TOTAL LIABILITIES</strong></td><td><strong>{formatCurrency(L.total)}</strong></td></tr>
             </tbody>
           </table>
@@ -1174,7 +1234,7 @@ const BalanceSheet = () => {
               <tr><td>Cash Balance</td><td>{formatCurrency(A.cash_balance)}</td></tr>
               <tr><td>Bank Balance</td><td>{formatCurrency(A.bank_balance)}</td></tr>
               <tr><td>Patti (Dukandar Receivable)</td><td>{formatCurrency(A.patti)}</td></tr>
-              <tr><td>Bepaari Advances</td><td>{formatCurrency(A.bepaari_advances)}</td></tr>
+              {A.bepaari_advances > 0 && <tr><td>Bepaari Advances</td><td>{formatCurrency(A.bepaari_advances)}</td></tr>}
               <tr className="sub-item"><td>Mandi Expenses</td><td>{formatCurrency(A.mandi_expenses.total)}</td></tr>
               <tr className="sub-item"><td>BF Discount</td><td>{formatCurrency(A.bf_discount.total)}</td></tr>
               <tr className="sub-item"><td>MHN Personal</td><td>{formatCurrency(A.mhn_personal.total)}</td></tr>

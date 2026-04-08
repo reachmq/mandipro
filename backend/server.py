@@ -395,6 +395,41 @@ async def get_party_statement(
         cash_query["date"] = date_query
     cash_entries = serialize_docs(await db.cash_book.find(cash_query).sort("date", 1).to_list(5000))
     
+    # Get adjustments (JVs) where this party is involved
+    adj_query = {}
+    if date_query:
+        adj_query["date"] = date_query
+    
+    all_adjustments = serialize_docs(await db.adjustments.find(adj_query).sort("date", 1).to_list(5000))
+    
+    # Filter adjustments for this party (as either debit or credit)
+    if party_type == "bepaari":
+        # For Bepaari: CREDIT side means someone paid them (reduces our payable)
+        party_adjustments = [
+            {**a, "direction": "CREDIT", "effect": "Received payment from " + a["debit_party_name"]}
+            for a in all_adjustments 
+            if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id
+        ]
+        # Also check if Bepaari is on DEBIT side (rare, but possible)
+        party_adjustments += [
+            {**a, "direction": "DEBIT", "effect": "Paid to " + a["credit_party_name"]}
+            for a in all_adjustments 
+            if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id
+        ]
+    else:
+        # For Dukandar: DEBIT side means they paid someone on our behalf (reduces their receivable)
+        party_adjustments = [
+            {**a, "direction": "DEBIT", "effect": "Paid to " + a["credit_party_name"]}
+            for a in all_adjustments 
+            if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id
+        ]
+        # Also check if Dukandar is on CREDIT side (rare)
+        party_adjustments += [
+            {**a, "direction": "CREDIT", "effect": "Received payment from " + a["debit_party_name"]}
+            for a in all_adjustments 
+            if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id
+        ]
+    
     # Calculate totals
     total_sales = sum(s["gross_amount"] for s in sales)
     total_qty = sum(s["quantity"] for s in sales)
@@ -403,20 +438,28 @@ async def get_party_statement(
     if party_type == "bepaari":
         payments = sum(c["amount"] for c in cash_entries if c["sub_type"] == "PAYMENT")
         deductions = sum(c["amount"] for c in cash_entries if c["sub_type"] != "PAYMENT")
+        # JV adjustments: CREDIT to Bepaari = payment received
+        adj_received = sum(a["amount"] for a in party_adjustments if a["direction"] == "CREDIT")
+        adj_paid = sum(a["amount"] for a in party_adjustments if a["direction"] == "DEBIT")
     else:
         payments = sum(c["amount"] for c in cash_entries if c["sub_type"] == "RECEIPT")
         deductions = sum(c["amount"] for c in cash_entries if c["sub_type"] != "RECEIPT")
+        # JV adjustments: DEBIT from Dukandar = payment made on our behalf
+        adj_paid = sum(a["amount"] for a in party_adjustments if a["direction"] == "DEBIT")
+        adj_received = sum(a["amount"] for a in party_adjustments if a["direction"] == "CREDIT")
     
     return {
         "party": serialize_doc(party),
         "sales": sales,
         "cash_entries": cash_entries,
+        "adjustments": party_adjustments,
         "summary": {
             "total_sales": total_sales,
             "total_quantity": total_qty,
             "total_discount": total_discount,
             "total_payments": payments,
             "total_deductions": deductions,
+            "total_adjustments": adj_received + adj_paid,
             "opening_balance": party.get("opening_balance", 0)
         }
     }
@@ -470,6 +513,14 @@ async def export_party_statement(
         writer.writerow([c["date"], c["type"], c["sub_type"], c["amount"], c["mode"]])
     writer.writerow([])
     
+    # Adjustments (JV) - NEW SECTION
+    if statement.get("adjustments"):
+        writer.writerow(["=== ADJUSTMENTS (JV) ==="])
+        writer.writerow(["Date", "Direction", "Effect", "Amount", "Narration"])
+        for a in statement["adjustments"]:
+            writer.writerow([a["date"], a["direction"], a["effect"], a["amount"], a.get("narration", "")])
+        writer.writerow([])
+    
     # Summary
     writer.writerow(["=== SUMMARY ==="])
     writer.writerow(["Total Sales", statement["summary"]["total_sales"]])
@@ -477,6 +528,7 @@ async def export_party_statement(
     writer.writerow(["Total Discount", statement["summary"]["total_discount"]])
     writer.writerow(["Total Payments", statement["summary"]["total_payments"]])
     writer.writerow(["Total Deductions", statement["summary"]["total_deductions"]])
+    writer.writerow(["Total Adjustments (JV)", statement["summary"].get("total_adjustments", 0)])
     
     output.seek(0)
     
@@ -630,21 +682,37 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
     capital_partners = serialize_docs(await db.capital_partners.find({"is_active": True}).to_list(100))
     advance_parties = serialize_docs(await db.advance_parties.find({"is_active": True}).to_list(100))
     
-    capital = sum(p.get("opening_balance", 0) for p in capital_partners if p.get("partner_type") == "CAPITAL")
-    loans = sum(p.get("opening_balance", 0) for p in capital_partners if p.get("partner_type") == "LOAN")
-    amanat = sum(p.get("opening_balance", 0) for p in capital_partners if p.get("partner_type") == "AMANAT")
+    # Build individual lists for Capital, Loans, and Amanat with their balances
+    capital_list = []
+    loans_list = []
+    amanat_list = []
     
-    for c in cash_entries:
-        t, st, amt = c.get("type"), c.get("sub_type"), c.get("amount", 0)
-        if t == "CAPITAL":
-            if st == "TAKEN": capital += amt
-            elif st in ["REPAID", "WITHDRAWN"]: capital -= amt
-        elif t == "LOAN":
-            if st == "TAKEN": loans += amt
-            elif st == "REPAID": loans -= amt
-        elif t == "AMANAT":
-            if st == "TAKEN": amanat += amt
-            elif st == "REPAID": amanat -= amt
+    for p in capital_partners:
+        p_type = p.get("partner_type")
+        p_name = p.get("name")
+        p_opening = p.get("opening_balance", 0)
+        
+        # Calculate movement for this partner
+        partner_taken = sum(c["amount"] for c in cash_entries 
+                          if c.get("type") == p_type and c.get("sub_type") == "TAKEN" and c.get("party_name") == p_name)
+        partner_repaid = sum(c["amount"] for c in cash_entries 
+                           if c.get("type") == p_type and c.get("sub_type") in ["REPAID", "WITHDRAWN"] and c.get("party_name") == p_name)
+        
+        partner_balance = p_opening + partner_taken - partner_repaid
+        
+        if partner_balance != 0:  # Only show if there's a balance
+            entry = {"id": p.get("id"), "name": p_name, "amount": partner_balance}
+            if p_type == "CAPITAL":
+                capital_list.append(entry)
+            elif p_type == "LOAN":
+                loans_list.append(entry)
+            elif p_type == "AMANAT":
+                amanat_list.append(entry)
+    
+    # Calculate totals
+    capital = sum(p["amount"] for p in capital_list)
+    loans = sum(p["amount"] for p in loans_list)
+    amanat = sum(p["amount"] for p in amanat_list)
     
     bepaari_payables = sum(b["balance"] for b in bepaari_ledger if b["balance"] > 0)
     bepaari_advances = sum(-b["balance"] for b in bepaari_ledger if b["balance"] < 0)
@@ -721,7 +789,9 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
     return {
         "as_on_date": as_on_date or "Current",
         "liabilities": {
-            "capital": capital, "loans": loans, "amanat": amanat,
+            "capital": capital, "capital_list": capital_list,
+            "loans": loans, "loans_list": loans_list,
+            "amanat": amanat, "amanat_list": amanat_list,
             "bepaari_payables": bepaari_payables, "dukandar_advances": dukandar_advances,
             "jb": {"bf": settings.get("jb_opening", 0), "collected": jb_collected, "paid": jb_paid, "total": jb_total},
             "kk": {"bf": settings.get("kk_opening", 0), "collected": kk_collected, "total": kk_total},

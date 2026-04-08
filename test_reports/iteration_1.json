@@ -1,0 +1,52 @@
+{
+  "summary": "Completed testing of Mandi Accounting Software features: Daily Sales Edit, Party Statement with JV/Adjustments, Balance Sheet with individual names, and CSV Export. All 11 backend tests passed. UI testing confirmed all features working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mandi_features.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_mandi_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% (all features verified)"
+  },
+  "test_credentials": "None required - app uses MongoDB locally",
+  "seed_data_creation": "No test data created - used existing Bepaari ID: 4355b776-51ed-48c1-b594-10fbfb19b494 (KISHOR + KAILASH)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All requested features verified working: 1) Daily Sales Edit (PUT /api/daily-sales/{id}) - modal opens, fields editable, amounts recalculate correctly. 2) Party Statement includes JV/Adjustments - shows direction (CREDIT/DEBIT), effect description, and amounts. 3) Balance Sheet shows individual Capital/Loans/Amanat names with amounts (MHN for Capital, SHAKIL GHODEGAON for Amanat). 4) Balance Sheet tallies perfectly (diff=0, ₹78,85,496 on both sides). 5) CSV Export includes ADJUSTMENTS (JV) section with headers and summary.",
+  "features_tested": {
+    "daily_sales_edit": {
+      "status": "PASS",
+      "details": "PUT /api/daily-sales/{id} works correctly. Updates discount/quantity/rate and recalculates gross_amount and net_amount. Edit modal in UI opens with all fields (Date, Bepaari, Dukandar, Qty, Rate, Discount)."
+    },
+    "party_statement_with_jv": {
+      "status": "PASS",
+      "details": "GET /api/party-statement/{type}/{id} returns adjustments array with direction, effect, amount, narration. UI shows 'Adjustments / JV' section with CREDIT/DEBIT badges. Summary includes 'Total Adjustments (JV)'."
+    },
+    "balance_sheet_individual_names": {
+      "status": "PASS",
+      "details": "GET /api/balance-sheet returns capital_list, loans_list, amanat_list with individual investor names and amounts. UI displays names under Capital (MHN) and Amanat (SHAKIL GHODEGAON) sections."
+    },
+    "balance_sheet_tallies": {
+      "status": "PASS",
+      "details": "Balance Sheet difference = 0. Liabilities = Assets = ₹78,85,496. UI shows 'BALANCE SHEET TALLIED' status."
+    },
+    "csv_export_with_adjustments": {
+      "status": "PASS",
+      "details": "GET /api/export/party-statement/{type}/{id} returns CSV with '=== ADJUSTMENTS (JV) ===' section, headers (Date, Direction, Effect, Amount, Narration), and 'Total Adjustments (JV)' in summary."
+    }
+  }
+}
