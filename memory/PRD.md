@@ -13,16 +13,18 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 
 **Completed Features:**
 - Dashboard with key metrics (Cash, Bank, Patti, Bepaari Payable, Commission)
-- Daily Sales entry with Bepaari/Dukandar selection, filters
-- Cash Book with Type-dependent Sub-Type dropdowns
-- Bepaari Ledger with full deduction calculations
-- Dukandar Ledger (Patti)
-- Balance Sheet (Assets vs Liabilities)
-- Party Statement with date filters & CSV export
-- Masters management (Bepaaris, Dukandars, Advance Parties, Capital Partners)
+- Daily Sales entry with Bepaari/Dukandar selection, filters, **EDIT functionality**
+- Cash Book with Type-dependent Sub-Type dropdowns, Edit, Search, Sort
+- Bepaari Ledger with full deduction calculations, clickable sortable headers
+- Dukandar Ledger (Patti) with sortable headers
+- Balance Sheet (Assets vs Liabilities) - **Now shows individual Capital/Loans/Amanat investor names**
+- Party Statement with date filters & CSV export - **Now includes JV/Adjustments section**
+- Masters management (Bepaaris, Dukandars, Advance Parties, Capital Partners) with Edit
 - Soft delete functionality for Masters
 - Phone number fields for Bepaaris/Dukandars
-- **Bepaari Aakda (Settlement Slip)** - Daily settlement calculations per Bepaari with print functionality (FIXED: 04 Dec 2025)
+- Bepaari Aakda (Settlement Slip) - Daily settlement calculations per Bepaari with print functionality
+- Adjustments / Journal Voucher (JV) for triangular settlements
+- Balance Transfer module for moving balances between parties
 
 ---
 
@@ -42,15 +44,18 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 - `/app/frontend/src/App.css` - Styles
 
 ### API Endpoints (all prefixed with /api)
-- GET/POST/DELETE `/bepaaris`, `/dukandars`, `/advance-parties`, `/capital-partners`
+- GET/POST/PUT/DELETE `/bepaaris`, `/dukandars`, `/advance-parties`, `/capital-partners`
 - GET/PUT `/settings`
-- GET/POST/DELETE `/daily-sales`
-- GET/POST/DELETE `/cash-book`
+- GET/POST/PUT/DELETE `/daily-sales`
+- GET/POST/PUT/DELETE `/cash-book`
+- GET/POST/PUT/DELETE `/adjustments`
+- POST `/balance-transfer`
+- PUT `/cash-book/reassign`
 - GET `/bepaari-ledger`, `/dukandar-ledger`
 - GET `/balance-sheet`
 - GET `/bepaari-aakda?date=YYYY-MM-DD` - Settlement slips
-- GET `/party-statement/{party_type}/{party_id}`
-- GET `/export/party-statement/{party_type}/{party_id}`
+- GET `/party-statement/{party_type}/{party_id}` - **Now includes JV adjustments**
+- GET `/export/party-statement/{party_type}/{party_id}` - **CSV now includes adjustments section**
 
 ---
 
@@ -60,6 +65,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 - **Bepaaris**: Sellers who bring goats (we owe them after sale)
 - **Dukandars**: Buyers who purchase goats (they owe us)
 - **Advance Parties**: External individuals we give/receive advances from
+- **Capital Partners**: Investors (Capital, Loan, Amanat types)
 
 ### Deductions from Bepaari (in Aakda)
 - Commission (4% or flat per-piece override)
@@ -70,7 +76,9 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 
 ### Balance Sheet Structure
 **Liabilities:**
-- Capital, Loans, Amanat
+- Capital (individual investor names now shown)
+- Loans (individual lender names now shown)
+- Amanat (individual names now shown)
 - Bepaari Payables
 - Dukandar Advances
 - JB, KK, Commission totals
@@ -93,11 +101,17 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | Dec 2025 | Built Dashboard, Daily Sales, Cash Book, Ledgers, Balance Sheet |
 | Dec 2025 | Added Party Statement with CSV export |
 | Dec 2025 | Added phone numbers to Masters |
-| 04 Dec 2025 | Fixed Bepaari Aakda 404 error (route was defined after router registration) |
-| 04 Dec 2025 | Cleaned up test data (fake sale causing ₹1,600 commission) |
-| 04 Dec 2025 | Deleted ALL data for fresh start (user will re-enter from paper records) |
-| 04 Dec 2025 | Added EDIT button/modal for Masters (Bepaaris, Dukandars, etc.) |
-| 04 Dec 2025 | Added **Adjustments/Journal Voucher (JV)** feature for triangular settlements |
+| 04 Dec 2025 | Fixed Bepaari Aakda 404 error |
+| 04 Dec 2025 | Added EDIT button/modal for Masters |
+| 04 Dec 2025 | Added Adjustments/Journal Voucher (JV) feature |
+| 04 Dec 2025 | Added Balance Transfer module |
+| 04 Dec 2025 | Added Search, Sort, Edit to Cash Book and Adjustments |
+| 04 Dec 2025 | Fixed BF_Disc double-deduction bug |
+| 04 Dec 2025 | Balance Sheet perfectly tallied |
+| 08 Apr 2026 | Added Daily Sales Edit button and modal |
+| 08 Apr 2026 | Party Statement now includes JV/Adjustments entries |
+| 08 Apr 2026 | Balance Sheet shows individual Capital/Loans/Amanat investor names |
+| 08 Apr 2026 | CSV export includes adjustments section |
 
 ---
 
@@ -125,9 +139,11 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 1. All backend routes MUST be defined BEFORE `app.include_router(api_router)` or they won't be registered
 2. Always exclude `_id` from MongoDB responses using `serialize_doc()` helper
 3. User has REAL DATA in the database - do not add test records without cleaning up
-4. The Balance Sheet has a ₹5,01,238 difference due to opening balances from user's paper records
+4. The Balance Sheet is currently **PERFECTLY TALLIED** (diff=0, ₹78,85,496) - do not break this
 5. Settings (commission rate, KK fixed, JB rate) are stored in MongoDB `settings` collection
+6. Party Statement now returns `adjustments` array with JV entries and `total_adjustments` in summary
+7. Balance Sheet returns `capital_list`, `loans_list`, `amanat_list` arrays for individual investor breakdown
 
 ---
 
-*Last Updated: 04 December 2025*
+*Last Updated: 08 April 2026*
