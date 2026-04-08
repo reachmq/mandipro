@@ -207,6 +207,9 @@ const BepariAakda = () => {
                     {selectedAakda.summary.payments > 0 && (
                       <tr><td>(-) Payment Made</td><td>{formatCurrency(selectedAakda.summary.payments)}</td></tr>
                     )}
+                    {selectedAakda.summary.jv_adjustment > 0 && (
+                      <tr className="jv-row"><td>(-) JV Adjustment</td><td>{formatCurrency(selectedAakda.summary.jv_adjustment)}</td></tr>
+                    )}
                     <tr className="closing-row">
                       <td><strong>CLOSING BALANCE</strong></td>
                       <td><strong>{formatCurrency(selectedAakda.summary.closing_balance)}</strong></td>

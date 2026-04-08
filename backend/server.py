@@ -837,19 +837,26 @@ async def get_bepaari_aakda(date: str):
     prev_sales = serialize_docs(await db.daily_sales.find({"date": {"$lt": date}}).to_list(5000))
     prev_cash = serialize_docs(await db.cash_book.find({"date": {"$lt": date}, "type": "BEPAARI"}).to_list(5000))
     
+    # Get ALL adjustments (for opening balance) and today's adjustments
+    all_adjustments = serialize_docs(await db.adjustments.find({}).to_list(5000))
+    prev_adjustments = [a for a in all_adjustments if a["date"] < date]
+    today_adjustments = [a for a in all_adjustments if a["date"] == date]
+    
     aakda_list = []
     
     for b in bepaaris:
         # Today's sales
         b_sales_today = [s for s in sales if s["bepaari_id"] == b["id"]]
         b_cash_today = [c for c in cash_entries if c.get("party_id") == b["id"]]
+        b_adj_today = [a for a in today_adjustments if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]]
         
-        if not b_sales_today and not b_cash_today:
+        if not b_sales_today and not b_cash_today and not b_adj_today:
             continue  # Skip Bepaaris with no activity today
         
         # Previous data for opening balance calculation
         b_prev_sales = [s for s in prev_sales if s["bepaari_id"] == b["id"]]
         b_prev_cash = [c for c in prev_cash if c.get("party_id") == b["id"]]
+        b_prev_adj = [a for a in prev_adjustments if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]]
         
         # Calculate previous balance (opening for today)
         prev_gross = sum(s["gross_amount"] for s in b_prev_sales)
@@ -867,9 +874,10 @@ async def get_bepaari_aakda(date: str):
         prev_gawali = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "GAWALI")
         prev_cash_adv = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "CASH_ADV")
         prev_payments = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "PAYMENT")
+        prev_adj_amount = sum(a["amount"] for a in b_prev_adj)  # JV credits to this Bepaari
         
         prev_total_ded = prev_comm + prev_kk + prev_jb + prev_motor + prev_bhussa + prev_gawali + prev_cash_adv
-        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments
+        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments - prev_adj_amount
         
         # Today's calculations
         today_gross = sum(s["gross_amount"] for s in b_sales_today)
@@ -887,10 +895,11 @@ async def get_bepaari_aakda(date: str):
         today_gawali = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "GAWALI")
         today_cash_adv = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "CASH_ADV")
         today_payments = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "PAYMENT")
+        today_adj_amount = sum(a["amount"] for a in b_adj_today)  # JV credits today
         
         today_total_ded = today_comm + today_kk + today_jb + today_motor + today_bhussa + today_gawali + today_cash_adv
         today_net = today_gross - today_total_ded
-        closing_balance = opening_balance + today_net - today_payments
+        closing_balance = opening_balance + today_net - today_payments - today_adj_amount
         
         # Sales breakdown by Dukandar
         sales_detail = []
@@ -925,6 +934,7 @@ async def get_bepaari_aakda(date: str):
                 "total_deductions": today_total_ded,
                 "net_amount": today_net,
                 "payments": today_payments,
+                "jv_adjustment": today_adj_amount,
                 "closing_balance": closing_balance
             }
         })
