@@ -15,7 +15,7 @@ const Sidebar = () => {
   const navItems = [
     { path: "/", label: "Dashboard", icon: "📊" },
     { path: "/daily-sales", label: "Daily Sales", icon: "🐐" },
-    { path: "/cash-book", label: "Cash Book", icon: "💰" },
+    { path: "/cash-book", label: "Cash & Bank", icon: "💰" },
     { path: "/adjustments", label: "Adjustments (JV)", icon: "🔄" },
     { path: "/balance-transfer", label: "Balance Transfer", icon: "↔️" },
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
@@ -333,7 +333,7 @@ const CashBook = () => {
 
   return (
     <div className="page">
-      <h2>Cash Book</h2>
+      <h2>Cash & Bank</h2>
       
       <form className="entry-form" onSubmit={handleSubmit}>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
@@ -416,7 +416,7 @@ const CashBook = () => {
       {editItem && (
         <div className="modal-overlay" onClick={() => setEditItem(null)}>
           <div className="modal-content" onClick={(ev) => ev.stopPropagation()}>
-            <h3>Edit Cash Book Entry</h3>
+            <h3>Edit Cash & Bank Entry</h3>
             <div className="edit-form">
               <label>Date:<input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /></label>
               <label>Amount:<input type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} /></label>
@@ -837,7 +837,7 @@ const BalanceTransfer = () => {
 
       {cashBookEntries.length > 0 && (
         <div className="entries-section">
-          <h3>Also Move These Cash Book Entries? (Optional)</h3>
+          <h3>Also Move These Cash & Bank Entries? (Optional)</h3>
           <p className="hint">Select entries that should be reassigned to the destination party</p>
           <div className="entries-list">
             {cashBookEntries.map(e => (
