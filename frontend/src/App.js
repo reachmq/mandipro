@@ -226,7 +226,7 @@ const CashBook = () => {
   const [entries, setEntries] = useState([]);
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
-  const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "" });
+  const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "", subType: "" });
   const [sortBy, setSortBy] = useState("date-desc");
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -250,6 +250,7 @@ const CashBook = () => {
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
       if (filters.type) url += `type=${filters.type}&`;
+      if (filters.subType) url += `sub_type=${filters.subType}&`;
       
       const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
@@ -376,12 +377,17 @@ const CashBook = () => {
       <div className="filter-bar">
         <label>From:</label><input type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} />
         <label>To:</label><input type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} />
-        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value, subType: "" })}>
           <option value="">All Types</option>
           {types.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select value={filters.subType} onChange={(e) => setFilters({ ...filters, subType: e.target.value })}>
+          <option value="">All Sub-Types</option>
+          {filters.type && subTypes[filters.type]?.map((st) => <option key={st} value={st}>{st}</option>)}
+          {!filters.type && Object.values(subTypes).flat().filter((v, i, a) => a.indexOf(v) === i).map((st) => <option key={st} value={st}>{st}</option>)}
+        </select>
         <button className="btn-primary" onClick={applyFilters}>Search</button>
-        <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "" }); fetchData(); }}>Clear</button>
+        <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "", subType: "" }); fetchData(); }}>Clear</button>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
           <option value="date-desc">Date (Newest)</option>
           <option value="date-asc">Date (Oldest)</option>

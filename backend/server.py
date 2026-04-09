@@ -283,7 +283,8 @@ async def get_cash_book(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     party_id: Optional[str] = None,
-    type: Optional[str] = None
+    type: Optional[str] = None,
+    sub_type: Optional[str] = None
 ):
     query = {}
     if date:
@@ -299,6 +300,8 @@ async def get_cash_book(
         query["party_id"] = party_id
     if type:
         query["type"] = type
+    if sub_type:
+        query["sub_type"] = sub_type
     
     entries = await db.cash_book.find(query).sort("date", -1).to_list(5000)
     return serialize_docs(entries)
