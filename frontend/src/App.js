@@ -320,12 +320,30 @@ const CashBook = () => {
   const sortedEntries = [...entries].sort((a, b) => {
     if (sortBy === "date-desc") return b.date.localeCompare(a.date);
     if (sortBy === "date-asc") return a.date.localeCompare(b.date);
+    if (sortBy === "type-asc") return (a.type || "").localeCompare(b.type || "");
+    if (sortBy === "type-desc") return (b.type || "").localeCompare(a.type || "");
+    if (sortBy === "subtype-asc") return (a.sub_type || "").localeCompare(b.sub_type || "");
+    if (sortBy === "subtype-desc") return (b.sub_type || "").localeCompare(a.sub_type || "");
     if (sortBy === "party-asc") return (a.party_name || "").localeCompare(b.party_name || "");
     if (sortBy === "party-desc") return (b.party_name || "").localeCompare(a.party_name || "");
     if (sortBy === "amount-desc") return b.amount - a.amount;
     if (sortBy === "amount-asc") return a.amount - b.amount;
+    if (sortBy === "mode-asc") return (a.mode || "").localeCompare(b.mode || "");
+    if (sortBy === "mode-desc") return (b.mode || "").localeCompare(a.mode || "");
     return 0;
   });
+
+  const handleSort = (column) => {
+    if (sortBy === `${column}-asc`) setSortBy(`${column}-desc`);
+    else if (sortBy === `${column}-desc`) setSortBy(`${column}-asc`);
+    else setSortBy(`${column}-asc`);
+  };
+
+  const SortHeader = ({ column, label }) => (
+    <th onClick={() => handleSort(column)} className="sortable-header">
+      {label} {sortBy.startsWith(column) && (sortBy.endsWith("-asc") ? "▲" : "▼")}
+    </th>
+  );
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
@@ -388,19 +406,23 @@ const CashBook = () => {
         </select>
         <button className="btn-primary" onClick={applyFilters}>Search</button>
         <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "", subType: "" }); fetchData(); }}>Clear</button>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
-          <option value="date-desc">Date (Newest)</option>
-          <option value="date-asc">Date (Oldest)</option>
-          <option value="party-asc">Party (A-Z)</option>
-          <option value="party-desc">Party (Z-A)</option>
-          <option value="amount-desc">Amount (High-Low)</option>
-          <option value="amount-asc">Amount (Low-High)</option>
-        </select>
       </div>
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>BF Disc</th><th>Mode</th><th>Comments</th><th>Actions</th></tr></thead>
+          <thead>
+            <tr>
+              <SortHeader column="date" label="Date" />
+              <SortHeader column="type" label="Type" />
+              <SortHeader column="subtype" label="Sub-Type" />
+              <SortHeader column="party" label="Party" />
+              <SortHeader column="amount" label="Amount" />
+              <th>BF Disc</th>
+              <SortHeader column="mode" label="Mode" />
+              <th>Comments</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
           <tbody>
             {sortedEntries.map((e) => (
               <tr key={e.id}>
