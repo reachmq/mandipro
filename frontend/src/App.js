@@ -224,9 +224,10 @@ const DailySales = () => {
 // ============== CASH BOOK ==============
 const CashBook = () => {
   const [entries, setEntries] = useState([]);
+  const [allEntries, setAllEntries] = useState([]); // Store all entries for client-side filtering
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
-  const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "", subType: "" });
+  const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "", subType: "", party: "", mode: "" });
   const [sortBy, setSortBy] = useState("date-desc");
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -243,19 +244,19 @@ const CashBook = () => {
     EXPENSE: ["MANDI", "TRAVEL", "FOOD", "SALARY", "MHN_PERSONAL", "JB_PAID", "MISC", "OTHER"],
     ZAKAT: ["PROVISION", "PAID"]
   };
+  const modes = ["CASH", "BANK", "UPI", "TRANSFER"];
 
   const fetchData = async () => {
     try {
       let url = `${API}/cash-book?`;
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
-      if (filters.type) url += `type=${filters.type}&`;
-      if (filters.subType) url += `sub_type=${filters.subType}&`;
       
       const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`)
       ]);
+      setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
@@ -316,8 +317,17 @@ const CashBook = () => {
     fetchData();
   };
 
+  // Client-side filtering based on column filters
+  const filteredEntries = allEntries.filter(e => {
+    if (filters.type && e.type !== filters.type) return false;
+    if (filters.subType && e.sub_type !== filters.subType) return false;
+    if (filters.party && e.party_name !== filters.party) return false;
+    if (filters.mode && e.mode !== filters.mode) return false;
+    return true;
+  });
+
   // Sorting
-  const sortedEntries = [...entries].sort((a, b) => {
+  const sortedEntries = [...filteredEntries].sort((a, b) => {
     if (sortBy === "date-desc") return b.date.localeCompare(a.date);
     if (sortBy === "date-asc") return a.date.localeCompare(b.date);
     if (sortBy === "type-asc") return (a.type || "").localeCompare(b.type || "");
@@ -333,17 +343,12 @@ const CashBook = () => {
     return 0;
   });
 
-  const handleSort = (column) => {
-    if (sortBy === `${column}-asc`) setSortBy(`${column}-desc`);
-    else if (sortBy === `${column}-desc`) setSortBy(`${column}-asc`);
-    else setSortBy(`${column}-asc`);
-  };
+  // Get unique values for dropdown filters
+  const uniqueParties = [...new Set(allEntries.map(e => e.party_name).filter(Boolean))].sort();
+  const uniqueSubTypes = [...new Set(allEntries.map(e => e.sub_type).filter(Boolean))].sort();
 
-  const SortHeader = ({ column, label }) => (
-    <th onClick={() => handleSort(column)} className="sortable-header">
-      {label} {sortBy.startsWith(column) && (sortBy.endsWith("-asc") ? "▲" : "▼")}
-    </th>
-  );
+  // Calculate filtered total
+  const filteredTotal = sortedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
@@ -395,30 +400,52 @@ const CashBook = () => {
       <div className="filter-bar">
         <label>From:</label><input type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} />
         <label>To:</label><input type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} />
-        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value, subType: "" })}>
-          <option value="">All Types</option>
-          {types.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={filters.subType} onChange={(e) => setFilters({ ...filters, subType: e.target.value })}>
-          <option value="">All Sub-Types</option>
-          {filters.type && subTypes[filters.type]?.map((st) => <option key={st} value={st}>{st}</option>)}
-          {!filters.type && Object.values(subTypes).flat().filter((v, i, a) => a.indexOf(v) === i).map((st) => <option key={st} value={st}>{st}</option>)}
-        </select>
         <button className="btn-primary" onClick={applyFilters}>Search</button>
-        <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "", subType: "" }); fetchData(); }}>Clear</button>
+        <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "", subType: "", party: "", mode: "" }); fetchData(); }}>Clear All</button>
       </div>
+
+      {(filters.type || filters.subType || filters.party || filters.mode) && (
+        <div className="filter-summary">
+          <strong>Filters:</strong> 
+          {filters.type && <span className="filter-tag">{filters.type} <button onClick={() => setFilters({...filters, type: ""})}>×</button></span>}
+          {filters.subType && <span className="filter-tag">{filters.subType} <button onClick={() => setFilters({...filters, subType: ""})}>×</button></span>}
+          {filters.party && <span className="filter-tag">{filters.party} <button onClick={() => setFilters({...filters, party: ""})}>×</button></span>}
+          {filters.mode && <span className="filter-tag">{filters.mode} <button onClick={() => setFilters({...filters, mode: ""})}>×</button></span>}
+          <span className="filter-result">| Showing {sortedEntries.length} entries | Total: <strong>{formatCurrency(filteredTotal)}</strong></span>
+        </div>
+      )}
 
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <SortHeader column="date" label="Date" />
-              <SortHeader column="type" label="Type" />
-              <SortHeader column="subtype" label="Sub-Type" />
-              <SortHeader column="party" label="Party" />
-              <SortHeader column="amount" label="Amount" />
+              <th>Date</th>
+              <th>
+                <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className="header-filter">
+                  <option value="">Type ▼</option>
+                  {types.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </th>
+              <th>
+                <select value={filters.subType} onChange={(e) => setFilters({ ...filters, subType: e.target.value })} className="header-filter">
+                  <option value="">Sub-Type ▼</option>
+                  {uniqueSubTypes.map((st) => <option key={st} value={st}>{st}</option>)}
+                </select>
+              </th>
+              <th>
+                <select value={filters.party} onChange={(e) => setFilters({ ...filters, party: e.target.value })} className="header-filter">
+                  <option value="">Party ▼</option>
+                  {uniqueParties.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </th>
+              <th>Amount</th>
               <th>BF Disc</th>
-              <SortHeader column="mode" label="Mode" />
+              <th>
+                <select value={filters.mode} onChange={(e) => setFilters({ ...filters, mode: e.target.value })} className="header-filter">
+                  <option value="">Mode ▼</option>
+                  {modes.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </th>
               <th>Comments</th>
               <th>Actions</th>
             </tr>

@@ -318,6 +318,72 @@ tr:hover {
   background-color: rgba(245, 101, 101, 0.1);
 }
 
+/* Header Filter Dropdowns */
+.header-filter {
+  background: transparent;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2d3748;
+  cursor: pointer;
+  min-width: 90px;
+}
+
+.header-filter:hover {
+  background: #edf2f7;
+}
+
+.header-filter:focus {
+  outline: none;
+  border-color: #48bb78;
+}
+
+/* Filter Summary Bar */
+.filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  background: #edf2f7;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #48bb78;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.filter-tag button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  margin-left: 2px;
+}
+
+.filter-tag button:hover {
+  color: #c6f6d5;
+}
+
+.filter-result {
+  margin-left: auto;
+  color: #4a5568;
+}
+
 /* Tabs */
 .tabs {
   display: flex;
