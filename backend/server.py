@@ -612,12 +612,16 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         gross = sum(s["gross_amount"] for s in b_sales)
         qty = sum(s["quantity"] for s in b_sales)
         
+        # Count unique market days for KK calculation
+        market_days = len(set(s["date"] for s in b_sales))
+        
         if b.get("flat_rate_per_goat"):
             commission = b["flat_rate_per_goat"] * qty
         else:
             commission = gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
         
-        kk = settings.get("kk_fixed", 100) if qty > 0 else 0
+        # KK is charged per market day, not flat
+        kk = settings.get("kk_fixed", 100) * market_days if market_days > 0 else 0
         jb = qty * settings.get("jb_rate", 10)
         
         motor = sum(c["amount"] for c in b_cash if c.get("sub_type") == "MOTOR")
@@ -1223,13 +1227,14 @@ async def get_bepaari_aakda(date: str):
         # Calculate previous balance (opening for today)
         prev_gross = sum(s["gross_amount"] for s in b_prev_sales)
         prev_qty = sum(s["quantity"] for s in b_prev_sales)
+        prev_market_days = len(set(s["date"] for s in b_prev_sales))
         
         if b.get("flat_rate_per_goat"):
             prev_comm = b["flat_rate_per_goat"] * prev_qty
         else:
             prev_comm = prev_gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
         
-        prev_kk = settings.get("kk_fixed", 100) if prev_qty > 0 else 0
+        prev_kk = settings.get("kk_fixed", 100) * prev_market_days if prev_market_days > 0 else 0
         prev_jb = prev_qty * settings.get("jb_rate", 10)
         prev_motor = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "MOTOR")
         prev_bhussa = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "BHUSSA")
