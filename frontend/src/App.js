@@ -1162,6 +1162,85 @@ const DukandarLedger = () => {
 
   useEffect(() => { fetchData(); }, [asOnDate]);
 
+  const handlePrint = () => {
+    const printDate = asOnDate || new Date().toISOString().split('T')[0];
+    const printWindow = window.open('', '_blank');
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Patti - Dukandar Outstanding - ${printDate}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { text-align: center; color: #1a365d; margin-bottom: 5px; }
+          .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: right; font-size: 12px; }
+          th { background: #1a365d; color: white; }
+          td:first-child, th:first-child { text-align: left; }
+          .total-row { background: #f0f0f0; font-weight: bold; }
+          .positive { color: green; }
+          .negative { color: red; }
+          .print-footer { margin-top: 30px; text-align: center; font-size: 11px; color: #888; }
+          @media print { 
+            body { padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>PATTI - Dukandar Outstanding</h1>
+        <p class="subtitle">As on: ${printDate}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Opening</th>
+              <th>Purchases</th>
+              <th>Discounts</th>
+              <th>Receipts</th>
+              <th>BF Disc</th>
+              <th>Adj</th>
+              <th>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedLedger.map(d => `
+              <tr>
+                <td><strong>${d.name}</strong></td>
+                <td>${d.phone || '-'}</td>
+                <td>${d.opening.toLocaleString('en-IN')}</td>
+                <td>${d.purchases.toLocaleString('en-IN')}</td>
+                <td>${d.discounts.toLocaleString('en-IN')}</td>
+                <td>${d.receipts.toLocaleString('en-IN')}</td>
+                <td>${d.bf_disc > 0 ? d.bf_disc.toLocaleString('en-IN') : '-'}</td>
+                <td>${d.adjustments > 0 ? d.adjustments.toLocaleString('en-IN') : '-'}</td>
+                <td class="${d.balance >= 0 ? 'positive' : 'negative'}">${d.balance.toLocaleString('en-IN')}</td>
+              </tr>
+            `).join('')}
+            <tr class="total-row">
+              <td><strong>TOTAL PATTI</strong></td>
+              <td></td>
+              <td>-</td>
+              <td>${totals.purchases.toLocaleString('en-IN')}</td>
+              <td>${totals.discounts.toLocaleString('en-IN')}</td>
+              <td>${totals.receipts.toLocaleString('en-IN')}</td>
+              <td>${totals.bf_disc > 0 ? totals.bf_disc.toLocaleString('en-IN') : '-'}</td>
+              <td>${totals.adj > 0 ? totals.adj.toLocaleString('en-IN') : '-'}</td>
+              <td><strong>${totals.balance.toLocaleString('en-IN')}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="print-footer">Generated from Mandi Accounting System</p>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   if (loading) return <div className="loading">Loading...</div>;
 
   // Sorting
@@ -1191,6 +1270,7 @@ const DukandarLedger = () => {
           <option value="balance-desc">Balance (High-Low)</option>
           <option value="balance-asc">Balance (Low-High)</option>
         </select>
+        <button className="btn-print" onClick={handlePrint}>🖨️ Print / Save PDF</button>
       </div>
       <div className="table-container">
         <table>
