@@ -55,6 +55,8 @@ const Dashboard = () => {
 
   if (loading) return <div className="loading">Loading...</div>;
 
+  const comm = data?.liabilities?.commission || {};
+
   return (
     <div className="page" data-testid="dashboard-page">
       <h2>Dashboard</h2>
@@ -64,7 +66,14 @@ const Dashboard = () => {
         <div className="card orange"><h3>Patti (Receivable)</h3><p className="big-number">{formatCurrency(data?.assets?.patti)}</p></div>
         <div className="card red"><h3>Bepaari Payable</h3><p className="big-number">{formatCurrency(data?.liabilities?.bepaari_payables)}</p></div>
         <div className={`card ${data?.difference === 0 ? "green" : "red"}`}><h3>Balance Sheet</h3><p className="big-number">{data?.difference === 0 ? "TALLIED" : `Diff: ${formatCurrency(data?.difference)}`}</p></div>
-        <div className="card purple"><h3>Commission Earned</h3><p className="big-number">{formatCurrency(data?.liabilities?.commission?.total)}</p></div>
+        <div className="card purple commission-card" data-testid="commission-card">
+          <h3>Net Commission</h3>
+          <p className="big-number" data-testid="commission-total">{formatCurrency(comm.total)}</p>
+          <div className="commission-breakdown">
+            <span data-testid="commission-gross">Gross: {formatCurrency(comm.earned)}</span>
+            <span data-testid="commission-discounts">Disc: -{formatCurrency(comm.discounts)}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

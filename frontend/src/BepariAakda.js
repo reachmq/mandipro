@@ -78,6 +78,42 @@ const BepariAakda = () => {
 
       {!loading && aakdaList.length > 0 && !selectedAakda && (
         <div className="aakda-grid">
+          {/* Daily Summary Banner */}
+          {(() => {
+            const totals = aakdaList.reduce((acc, a) => ({
+              qty: acc.qty + (a.summary.quantity || 0),
+              gross: acc.gross + (a.summary.gross_sales || 0),
+              commission: acc.commission + (a.summary.commission || 0),
+              deductions: acc.deductions + (a.summary.total_deductions || 0),
+              net: acc.net + (a.summary.net_amount || 0),
+            }), { qty: 0, gross: 0, commission: 0, deductions: 0, net: 0 });
+            return (
+              <div className="daily-summary-banner" data-testid="daily-summary-banner">
+                <div className="daily-summary-header">
+                  <h3>Day's Summary — {new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</h3>
+                  <span className="bepaari-count">{aakdaList.length} Bepaaris</span>
+                </div>
+                <div className="daily-summary-cards">
+                  <div className="summary-stat" data-testid="daily-total-goats">
+                    <span className="stat-label">Total Goats</span>
+                    <span className="stat-value goats">{totals.qty}</span>
+                  </div>
+                  <div className="summary-stat" data-testid="daily-gross-sales">
+                    <span className="stat-label">Gross Sales</span>
+                    <span className="stat-value gross">{formatCurrency(totals.gross)}</span>
+                  </div>
+                  <div className="summary-stat" data-testid="daily-commission">
+                    <span className="stat-label">Commission Earned</span>
+                    <span className="stat-value commission">{formatCurrency(totals.commission)}</span>
+                  </div>
+                  <div className="summary-stat" data-testid="daily-net-amount">
+                    <span className="stat-label">Net Payable</span>
+                    <span className="stat-value net">{formatCurrency(totals.net)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <h3>Bepaaris with transactions on {date} ({aakdaList.length})</h3>
           <div className="table-container">
             <table>

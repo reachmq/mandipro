@@ -116,6 +116,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | 08 Apr 2026 | Party Statement now includes Balance Transfers section (IN/OUT) |
 | 08 Apr 2026 | Added `/api/balance-transfers/backfill` endpoint for retroactive record creation |
 | 08 Apr 2026 | Backfilled Siraj Kurla → Lala Andheri transfer (₹1,59,000) |
+| Feb 2026 | **Commission Visibility (Option A+B)**: Dashboard Net Commission card (Gross/Disc/Net). Bepaari Aakda Day's Summary banner (Total Goats, Gross Sales, Commission Earned, Net Payable). |
 
 ---
 
@@ -126,9 +127,10 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
    - Calculate distributable profit (Commission - Expenses - Provisions)
    - Adjust balances and carry forward to next month
 
-2. **Advance Repayment / JV Tracking**
-   - Handle "Junaid Amanat" scenario (₹10K weekly repayment from sales)
-   - Link Amanat accounts to main Bepaari accounts
+### P1 - Pinned (User Deferred)
+1. **UI/UX Overhaul - "Dalal Premium Traditional" Theme**
+   - Deep Sapphire Blue + Antique Gold palette
+   - User said: "Keep this pinned. Will choose closer to deployment."
 
 ### P2 - Future/Backlog
 1. WhatsApp/SMS Integration for outstanding reports
