@@ -117,6 +117,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | 08 Apr 2026 | Added `/api/balance-transfers/backfill` endpoint for retroactive record creation |
 | 08 Apr 2026 | Backfilled Siraj Kurla → Lala Andheri transfer (₹1,59,000) |
 | Feb 2026 | **Commission Visibility (Option A+B)**: Dashboard Net Commission card (Gross/Disc/Net). Bepaari Aakda Day's Summary banner (Total Goats, Gross Sales, Commission Earned, Net Payable). |
+| Feb 2026 | **Differential Pricing**: Optional `dukandar_rate` field in Daily Sales. When Dukandar rate differs from Bepaari rate, each ledger uses its own rate. Rate difference flows to Commission. Balance Sheet stays tallied. |
 
 ---
 
