@@ -389,6 +389,18 @@ tr:hover {
   background: rgba(237, 137, 54, 0.1);
 }
 
+.transfer-info-row {
+  background: rgba(160, 174, 192, 0.08);
+  color: #a0aec0;
+  font-style: italic;
+}
+
+.transfer-note {
+  font-size: 10px;
+  color: #a0aec0;
+  margin-left: 4px;
+}
+
 /* Header Filter Dropdowns */
 .header-filter {
   background: transparent;

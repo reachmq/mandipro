@@ -1112,15 +1112,19 @@ const PartyStatement = () => {
       });
     }
     
-    // Add balance transfers (for both)
+    // Add balance transfers as informational rows (NOT affecting running balance)
+    // Balance transfers already modify opening_balance directly in the DB
     if (statement.balance_transfers) {
       statement.balance_transfers.forEach(t => {
         entries.push({
           date: t.date,
           description: `Transfer: ${t.effect}`,
-          debit: t.direction === "OUT" ? t.amount : 0,
-          credit: t.direction === "IN" ? t.amount : 0,
-          type: 'transfer'
+          debit: 0,
+          credit: 0,
+          type: 'transfer',
+          infoOnly: true,
+          transferAmount: t.amount,
+          transferDirection: t.direction
         });
       });
     }
@@ -1210,9 +1214,9 @@ const PartyStatement = () => {
               <td>${(statement.summary.opening_balance || 0).toLocaleString('en-IN')}</td>
             </tr>
             ${ledgerEntries.map(e => `
-              <tr>
+              <tr${e.infoOnly ? ' style="color:#999;font-style:italic"' : ''}>
                 <td>${e.date}</td>
-                <td>${e.description}</td>
+                <td>${e.description}${e.infoOnly ? ` (${e.transferAmount.toLocaleString('en-IN')} — already in opening bal.)` : ''}</td>
                 <td>${e.debit > 0 ? e.debit.toLocaleString('en-IN') : '-'}</td>
                 <td>${e.credit > 0 ? e.credit.toLocaleString('en-IN') : '-'}</td>
                 <td>${e.balance.toLocaleString('en-IN')}</td>
@@ -1291,9 +1295,9 @@ const PartyStatement = () => {
                   <td><strong>{formatCurrency(statement.summary.opening_balance || 0)}</strong></td>
                 </tr>
                 {ledgerEntries.map((e, i) => (
-                  <tr key={i} className={e.type === 'sale' ? 'sale-row' : e.type === 'adjustment' ? 'adjustment-row' : ''}>
+                  <tr key={i} className={e.type === 'sale' ? 'sale-row' : e.type === 'adjustment' ? 'adjustment-row' : e.type === 'transfer' ? 'transfer-info-row' : ''}>
                     <td>{e.date}</td>
-                    <td>{e.description}</td>
+                    <td>{e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — already in opening bal.)</span>}</td>
                     <td>{e.debit > 0 ? formatCurrency(e.debit) : "-"}</td>
                     <td>{e.credit > 0 ? formatCurrency(e.credit) : "-"}</td>
                     <td className={e.balance >= 0 ? "positive" : "negative"}>{formatCurrency(e.balance)}</td>

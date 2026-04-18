@@ -432,8 +432,9 @@ async def get_party_statement(
             prev_transfers_in = sum(t["amount"] for t in prev_transfers if t.get("to_party_id") == party_id)
             prev_transfers_out = sum(t["amount"] for t in prev_transfers if t.get("from_party_id") == party_id)
             
-            # Bepaari balance = Opening + Sales - Deductions - Payments - Adj_Credits + Adj_Debits + Transfers_In - Transfers_Out
-            calculated_opening = original_opening + prev_sales_total - prev_deductions - prev_payments - prev_adj_credits + prev_adj_debits + prev_transfers_in - prev_transfers_out
+            # Bepaari balance = Opening + Sales - Deductions - Payments - Adj_Credits + Adj_Debits
+            # Note: Balance transfers already modify opening_balance directly, so DON'T include them here
+            calculated_opening = original_opening + prev_sales_total - prev_deductions - prev_payments - prev_adj_credits + prev_adj_debits
         else:
             prev_receipts = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "RECEIPT")
             prev_bf_disc = sum(c.get("bf_disc", 0) for c in prev_cash)
@@ -442,8 +443,9 @@ async def get_party_statement(
             prev_transfers_in = sum(t["amount"] for t in prev_transfers if t.get("to_party_id") == party_id)
             prev_transfers_out = sum(t["amount"] for t in prev_transfers if t.get("from_party_id") == party_id)
             
-            # Dukandar balance = Opening + Purchases - Discounts - Receipts - BF_Disc - Adj_Debits + Adj_Credits + Transfers_In - Transfers_Out
-            calculated_opening = original_opening + prev_sales_total - prev_discount_total - prev_receipts - prev_bf_disc - prev_adj_debits + prev_adj_credits + prev_transfers_in - prev_transfers_out
+            # Dukandar balance = Opening + Purchases - Discounts - Receipts - BF_Disc - Adj_Debits + Adj_Credits
+            # Note: Balance transfers already modify opening_balance directly, so DON'T include them here
+            calculated_opening = original_opening + prev_sales_total - prev_discount_total - prev_receipts - prev_bf_disc - prev_adj_debits + prev_adj_credits
     
     # Build date query for filtered period
     date_query = {}
