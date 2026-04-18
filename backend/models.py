@@ -101,6 +101,8 @@ class DailySale(BaseModel):
     gross_amount: float
     discount: float = 0.0
     net_amount: float
+    dukandar_rate: Optional[float] = None
+    dukandar_amount: Optional[float] = None
 
 class CashBookEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -121,6 +123,7 @@ class DailySaleCreate(BaseModel):
     quantity: int
     rate: float
     discount: float = 0.0
+    dukandar_rate: Optional[float] = None
 
 class CashBookEntryCreate(BaseModel):
     date: str

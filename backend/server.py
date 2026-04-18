@@ -220,6 +220,9 @@ async def create_daily_sale(data: DailySaleCreate):
     gross = data.quantity * data.rate
     net = gross - data.discount
     
+    dukandar_rate = data.dukandar_rate if data.dukandar_rate and data.dukandar_rate != data.rate else None
+    dukandar_amount = (data.quantity * dukandar_rate) if dukandar_rate else None
+    
     sale = DailySale(
         date=data.date,
         bepaari_id=data.bepaari_id,
@@ -230,7 +233,9 @@ async def create_daily_sale(data: DailySaleCreate):
         rate=data.rate,
         gross_amount=gross,
         discount=data.discount,
-        net_amount=net
+        net_amount=net,
+        dukandar_rate=dukandar_rate,
+        dukandar_amount=dukandar_amount
     )
     doc = sale.model_dump()
     doc["created_at"] = datetime.utcnow().isoformat()
@@ -250,14 +255,23 @@ async def update_daily_sale(sale_id: str, data: dict):
         if field in data:
             update_fields[field] = data[field]
     
-    # Recalculate amounts if qty/rate/discount changed
-    if "quantity" in data or "rate" in data or "discount" in data:
+    # Recalculate amounts if qty/rate/discount/dukandar_rate changed
+    if "quantity" in data or "rate" in data or "discount" in data or "dukandar_rate" in data:
         sale = await db.daily_sales.find_one({"id": sale_id})
         qty = data.get("quantity", sale.get("quantity", 0))
         rate = data.get("rate", sale.get("rate", 0))
         discount = data.get("discount", sale.get("discount", 0))
         update_fields["gross_amount"] = qty * rate
         update_fields["net_amount"] = (qty * rate) - discount
+        
+        # Handle dukandar_rate
+        dukandar_rate = data.get("dukandar_rate", sale.get("dukandar_rate"))
+        if dukandar_rate and dukandar_rate != rate:
+            update_fields["dukandar_rate"] = dukandar_rate
+            update_fields["dukandar_amount"] = qty * dukandar_rate
+        else:
+            update_fields["dukandar_rate"] = None
+            update_fields["dukandar_amount"] = None
     
     # Update bepaari/dukandar if changed
     if "bepaari_id" in data:
@@ -391,7 +405,10 @@ async def get_party_statement(
         # Previous sales
         prev_sales_query = {"bepaari_id" if party_type == "bepaari" else "dukandar_id": party_id, "date": prev_date_query}
         prev_sales = await db.daily_sales.find(prev_sales_query).to_list(5000)
-        prev_sales_total = sum(s["gross_amount"] for s in prev_sales)
+        prev_sales_total = sum(
+            (s.get("dukandar_amount") or s["gross_amount"]) if party_type == "dukandar" else s["gross_amount"]
+            for s in prev_sales
+        )
         prev_discount_total = sum(s.get("discount", 0) for s in prev_sales)
         
         # Previous cash entries
@@ -510,7 +527,10 @@ async def get_party_statement(
             })
     
     # Calculate totals
-    total_sales = sum(s["gross_amount"] for s in sales)
+    total_sales = sum(
+        (s.get("dukandar_amount") or s["gross_amount"]) if party_type == "dukandar" else s["gross_amount"]
+        for s in sales
+    )
     total_qty = sum(s["quantity"] for s in sales)
     total_discount = sum(s["discount"] for s in sales)
     
@@ -733,7 +753,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         d_sales = [s for s in serialize_docs(sales) if s["dukandar_id"] == d["id"]]
         d_cash = [c for c in serialize_docs(cash_entries) if c.get("party_id") == d["id"]]
         
-        purchases = sum(s["gross_amount"] for s in d_sales)
+        purchases = sum(s.get("dukandar_amount") or s["gross_amount"] for s in d_sales)
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
         # BF_DISC: Only from standalone BF_DISC entries reduces balance
@@ -824,10 +844,20 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
     commission_earned = sum(b["commission"] for b in bepaari_ledger)
     discounts_given = sum(d["discounts"] for d in dukandar_ledger)
     
+    # Rate difference: when dukandar_rate > bepaari rate, the extra goes to commission
+    sales_query = {}
+    if as_on_date:
+        sales_query["date"] = {"$lte": as_on_date}
+    all_sales = serialize_docs(await db.daily_sales.find(sales_query).to_list(10000))
+    rate_difference = sum(
+        (s["dukandar_amount"] - s["gross_amount"])
+        for s in all_sales if s.get("dukandar_amount")
+    )
+    
     jb_paid = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "JB_PAID")
     jb_total = settings.get("jb_opening", 0) + jb_collected - jb_paid
     kk_total = settings.get("kk_opening", 0) + kk_collected
-    commission_total = settings.get("commission_opening", 0) + commission_earned - discounts_given
+    commission_total = settings.get("commission_opening", 0) + commission_earned + rate_difference - discounts_given
     
     zakat_prov = sum(c["amount"] for c in cash_entries if c.get("type") == "ZAKAT" and c.get("sub_type") == "PROVISION")
     zakat_paid = sum(c["amount"] for c in cash_entries if c.get("type") == "ZAKAT" and c.get("sub_type") == "PAID")
@@ -895,7 +925,7 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
             "bepaari_payables": bepaari_payables, "dukandar_advances": dukandar_advances,
             "jb": {"bf": settings.get("jb_opening", 0), "collected": jb_collected, "paid": jb_paid, "total": jb_total},
             "kk": {"bf": settings.get("kk_opening", 0), "collected": kk_collected, "total": kk_total},
-            "commission": {"bf": settings.get("commission_opening", 0), "earned": commission_earned, "discounts": discounts_given, "total": commission_total},
+            "commission": {"bf": settings.get("commission_opening", 0), "earned": commission_earned, "rate_diff": rate_difference, "discounts": discounts_given, "total": commission_total},
             "zakat": zakat_total, "total": total_liab
         },
         "assets": {

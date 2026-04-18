@@ -71,6 +71,7 @@ const Dashboard = () => {
           <p className="big-number" data-testid="commission-total">{formatCurrency(comm.total)}</p>
           <div className="commission-breakdown">
             <span data-testid="commission-gross">Gross: {formatCurrency(comm.earned)}</span>
+            {comm.rate_diff > 0 && <span data-testid="commission-rate-diff">Rate Diff: +{formatCurrency(comm.rate_diff)}</span>}
             <span data-testid="commission-discounts">Disc: -{formatCurrency(comm.discounts)}</span>
           </div>
         </div>
@@ -84,7 +85,7 @@ const DailySales = () => {
   const [sales, setSales] = useState([]);
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
-  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0" });
+  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", bepaari_id: "", dukandar_id: "" });
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -112,8 +113,8 @@ const DailySales = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await axios.post(`${API}/daily-sales`, { ...form, quantity: parseInt(form.quantity), rate: parseFloat(form.rate), discount: parseFloat(form.discount || 0) });
-    setForm({ ...form, bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0" });
+    await axios.post(`${API}/daily-sales`, { ...form, quantity: parseInt(form.quantity), rate: parseFloat(form.rate), discount: parseFloat(form.discount || 0), dukandar_rate: form.dukandar_rate ? parseFloat(form.dukandar_rate) : null });
+    setForm({ ...form, bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "" });
     fetchData();
   };
 
@@ -127,7 +128,8 @@ const DailySales = () => {
       dukandar_id: sale.dukandar_id,
       quantity: sale.quantity,
       rate: sale.rate,
-      discount: sale.discount || 0
+      discount: sale.discount || 0,
+      dukandar_rate: sale.dukandar_rate || ""
     });
   };
 
@@ -136,7 +138,8 @@ const DailySales = () => {
       ...editForm,
       quantity: parseInt(editForm.quantity),
       rate: parseFloat(editForm.rate),
-      discount: parseFloat(editForm.discount || 0)
+      discount: parseFloat(editForm.discount || 0),
+      dukandar_rate: editForm.dukandar_rate ? parseFloat(editForm.dukandar_rate) : null
     });
     setEditItem(null);
     fetchData();
@@ -163,6 +166,7 @@ const DailySales = () => {
         <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required min="1" />
         <input type="number" placeholder="Rate" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} required />
         <input type="number" placeholder="Discount" value={form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} />
+        <input type="number" placeholder="Duk. Rate (optional)" value={form.dukandar_rate} onChange={(e) => setForm({ ...form, dukandar_rate: e.target.value })} data-testid="dukandar-rate-input" title="Only fill if Dukandar rate differs from Bepaari rate" />
         <button type="submit" className="btn-primary">Add Sale</button>
       </form>
 
@@ -182,12 +186,14 @@ const DailySales = () => {
 
       <div className="table-container">
         <table>
-          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Duk. Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Actions</th></tr></thead>
           <tbody>
             {sales.map((s) => (
               <tr key={s.id}>
                 <td>{s.date}</td><td>{s.bepaari_name}</td><td>{s.dukandar_name}</td><td>{s.quantity}</td>
-                <td>{formatCurrency(s.rate)}</td><td>{formatCurrency(s.gross_amount)}</td><td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
+                <td>{formatCurrency(s.rate)}</td>
+                <td>{s.dukandar_rate ? formatCurrency(s.dukandar_rate) : "—"}</td>
+                <td>{formatCurrency(s.gross_amount)}</td><td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
                 <td>
                   <button className="btn-edit" onClick={() => handleEdit(s)}>Edit</button>
                   <button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button>
@@ -218,6 +224,7 @@ const DailySales = () => {
               <label>Qty:<input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} /></label>
               <label>Rate:<input type="number" value={editForm.rate} onChange={(e) => setEditForm({ ...editForm, rate: e.target.value })} /></label>
               <label>Discount:<input type="number" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} /></label>
+              <label>Duk. Rate:<input type="number" placeholder="Optional" value={editForm.dukandar_rate} onChange={(e) => setEditForm({ ...editForm, dukandar_rate: e.target.value })} /></label>
             </div>
             <div className="modal-actions">
               <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
@@ -1626,6 +1633,7 @@ const BalanceSheet = () => {
               <tr className="sub-item"><td>JB Total</td><td>{formatCurrency(L.jb.total)}</td></tr>
               <tr className="sub-item"><td>KK Total</td><td>{formatCurrency(L.kk.total)}</td></tr>
               <tr className="sub-item"><td>Commission Total</td><td>{formatCurrency(L.commission.total)}</td></tr>
+              {L.commission.rate_diff > 0 && <tr className="sub-item" style={{fontSize:'11px',color:'#718096'}}><td>&nbsp;&nbsp;(incl. Rate Diff: {formatCurrency(L.commission.rate_diff)})</td><td></td></tr>}
               {L.zakat > 0 && <tr><td>Zakat Payable</td><td>{formatCurrency(L.zakat)}</td></tr>}
               <tr className="total-row"><td><strong>TOTAL LIABILITIES</strong></td><td><strong>{formatCurrency(L.total)}</strong></td></tr>
             </tbody>

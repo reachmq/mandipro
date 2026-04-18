@@ -1,0 +1,84 @@
+{
+  "summary": "Completed testing of Differential Pricing feature for Mandi Accounting System. All 10 backend API tests passed. UI testing confirmed all frontend elements working correctly. Balance sheet remains tallied (difference=0) after differential pricing operations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_differential_pricing.py",
+    "/app/test_reports/pytest/pytest_differential_pricing.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_differential_pricing.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": "None required - app uses MongoDB locally",
+  "seed_data_creation": "Test sales created and deleted during testing. Used existing Bepaari: KISHOR (b6718523-6cfe-41fe-930c-d97ffd7f008f) and Dukandar: GABBAR (b29dbd04-ada5-48b2-b69a-1dc217627e65)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Differential Pricing feature fully tested and working. Key findings: 1) POST /api/daily-sales with dukandar_rate creates sale with correct dukandar_amount calculation. 2) When dukandar_rate equals rate or is not provided, both dukandar_rate and dukandar_amount are stored as null. 3) PUT /api/daily-sales/{id} correctly updates dukandar_rate and recalculates dukandar_amount. 4) Balance Sheet commission includes rate_diff field which sums (dukandar_amount - gross_amount) for all differential pricing sales. 5) Balance Sheet tallies (difference=0) after differential pricing operations. 6) Dukandar Ledger uses dukandar_amount (when present) for purchases calculation. 7) Bepaari Ledger uses gross_amount (not dukandar_amount) for sales calculation. 8) UI shows 'Duk. Rate (optional)' field in entry form, 'DUK. RATE' column in table (shows dash for normal sales), and 'Duk. Rate' field in edit modal.",
+  "features_tested": {
+    "create_sale_with_dukandar_rate": {
+      "status": "PASS",
+      "details": "POST /api/daily-sales with dukandar_rate correctly calculates dukandar_amount = quantity * dukandar_rate. Gross amount uses bepaari rate."
+    },
+    "create_sale_without_dukandar_rate": {
+      "status": "PASS",
+      "details": "POST /api/daily-sales without dukandar_rate works exactly as before. dukandar_rate and dukandar_amount are null."
+    },
+    "create_sale_with_same_rate": {
+      "status": "PASS",
+      "details": "When dukandar_rate equals bepaari rate, both dukandar_rate and dukandar_amount are stored as null (optimization)."
+    },
+    "update_sale_add_dukandar_rate": {
+      "status": "PASS",
+      "details": "PUT /api/daily-sales/{id} with dukandar_rate correctly updates and recalculates dukandar_amount."
+    },
+    "update_sale_clear_dukandar_rate": {
+      "status": "PASS",
+      "details": "Setting dukandar_rate to same as rate clears both fields to null."
+    },
+    "balance_sheet_rate_diff": {
+      "status": "PASS",
+      "details": "Balance Sheet commission includes rate_diff field. Rate diff = sum of (dukandar_amount - gross_amount) for all differential pricing sales."
+    },
+    "balance_sheet_tallies": {
+      "status": "PASS",
+      "details": "Balance Sheet difference = 0 after creating differential pricing sales. Rate diff is added to commission on liabilities side."
+    },
+    "dukandar_ledger_uses_dukandar_amount": {
+      "status": "PASS",
+      "details": "Dukandar Ledger purchases calculation uses dukandar_amount when present, otherwise gross_amount."
+    },
+    "bepaari_ledger_uses_gross_amount": {
+      "status": "PASS",
+      "details": "Bepaari Ledger uses gross_amount for sales calculation (not affected by dukandar_rate)."
+    },
+    "ui_duk_rate_field_in_form": {
+      "status": "PASS",
+      "details": "Daily Sales entry form shows 'Duk. Rate (optional)' input field with data-testid='dukandar-rate-input'."
+    },
+    "ui_duk_rate_column_in_table": {
+      "status": "PASS",
+      "details": "Daily Sales table has 'DUK. RATE' column. Shows dash (—) for normal sales, shows rate value for differential pricing sales."
+    },
+    "ui_duk_rate_in_edit_modal": {
+      "status": "PASS",
+      "details": "Edit Sale modal includes 'Duk. Rate:' field with 'Optional' placeholder."
+    },
+    "ui_rate_diff_in_dashboard": {
+      "status": "PASS",
+      "details": "Dashboard commission card shows 'Rate Diff: +₹X' when rate_diff > 0. Hidden when rate_diff = 0."
+    }
+  }
+}
