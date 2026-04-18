@@ -1,0 +1,109 @@
+{
+  "project_name": "Mandi Accounting Software",
+  "target_audience": "Commission agents (Dalals) in Indian livestock wholesale markets. Need clear readable numbers, fast data entry, bilingual support.",
+  "status": "Design Concept Phase",
+  "design_directions": [
+    {
+      "option": 1,
+      "name": "The 'Bahi Khata' Modernist (Earthy & Grounded)",
+      "concept": "Bridges traditional Indian accounting books (Bahi Khata) with modern SaaS. Feels grounded, physical, and highly trustworthy for traditional traders.",
+      "colors": {
+        "primary": "#C84B31",
+        "primary_description": "Terracotta Red (inspired by traditional ledger covers)",
+        "background": "#FBF8F1",
+        "surface": "#FFFFFF",
+        "text_primary": "#191919",
+        "credit_green": "#2E7D32",
+        "debit_red": "#D32F2F"
+      },
+      "typography": {
+        "headings": "Merriweather (Classic, reliable serif)",
+        "body": "Work Sans",
+        "numbers": "IBM Plex Mono (Crucial for aligning tabular ₹ amounts)"
+      },
+      "layout_and_ui": "Neumorphic-lite. Soft paper-like shadows, generous padding (p-6/p-8). Cards have slightly rounded corners (rounded-lg).",
+      "best_for": "Older generations of traders who are transitioning from paper to digital."
+    },
+    {
+      "option": 2,
+      "name": "The 'Mandi Terminal' (High-Contrast & Dense)",
+      "concept": "Built for speed, high data density, and outdoor readability (sunlight). Prioritizes raw functionality and sharp contrast.",
+      "colors": {
+        "primary": "#0A0A0A",
+        "primary_description": "Obsidian Black",
+        "accent": "#2563EB",
+        "background": "#F8FAFC",
+        "surface": "#FFFFFF",
+        "text_primary": "#020617",
+        "credit_green": "#16A34A",
+        "debit_red": "#DC2626"
+      },
+      "typography": {
+        "headings": "Chivo (Solid, authoritative sans)",
+        "body": "IBM Plex Sans",
+        "numbers": "JetBrains Mono"
+      },
+      "layout_and_ui": "Grid Borders ('Technical' Look). Dense UI (p-3/p-4). Visible grid lines, 1px solid borders, zero shadows. High utilization of screen real estate.",
+      "best_for": "Power users processing hundreds of entries a day; users working outdoors in bright light."
+    },
+    {
+      "option": 3,
+      "name": "The 'Dalal Premium' (Jewel & Trust)",
+      "concept": "Elevates the Dalal's status. Feels like a premium corporate banking app. Darker accents communicate security and established wealth.",
+      "colors": {
+        "primary": "#1E3A8A",
+        "primary_description": "Deep Sapphire",
+        "accent": "#D97706",
+        "background": "#F1F5F9",
+        "surface": "#FFFFFF",
+        "text_primary": "#0F172A",
+        "credit_green": "#059669",
+        "debit_red": "#E11D48"
+      },
+      "typography": {
+        "headings": "Playfair Display (Premium, wealth-associated)",
+        "body": "Manrope",
+        "numbers": "Fira Code"
+      },
+      "layout_and_ui": "Glassmorphism headers, crisp solid white cards with subtle ambient shadows. Gold/Bronze accents for primary CTAs.",
+      "best_for": "Large-scale commission agents wanting to impress Bepaaris with a highly professional setup."
+    },
+    {
+      "option": 4,
+      "name": "The 'Clear Khisa' (Soft & Approachable)",
+      "concept": "Reduces the cognitive load and stress of accounting. Large, friendly interfaces, distinct color-coding for different transaction types.",
+      "colors": {
+        "primary": "#15803D",
+        "primary_description": "Forest Green (Growth & Safety)",
+        "background": "#F0FDF4",
+        "surface": "#FFFFFF",
+        "text_primary": "#1C1917",
+        "credit_green": "#16A34A",
+        "debit_red": "#EF4444"
+      },
+      "typography": {
+        "headings": "Outfit (Friendly, modern geometric)",
+        "body": "Nunito",
+        "numbers": "Space Mono"
+      },
+      "layout_and_ui": "Generous spacing (p-8), large pill-shaped buttons, rounded cards (rounded-xl), clear distinct pastel backgrounds for different states.",
+      "best_for": "Agents using mobile devices predominantly, needing fat-finger-friendly touch targets."
+    }
+  ],
+  "universal_ui_ux_guidelines": {
+    "1": "Never use pure #000000 or #808080. Tint neutrals slightly (e.g. Slate or Zinc in Tailwind).",
+    "2": "All monetary values must be right-aligned in tables and use a Monospace font to ensure decimal points align vertically.",
+    "3": "Indian Rupee formatting is MANDATORY (e.g. ₹ 1,50,000.00).",
+    "4": "Hover states must explicitly set text color (e.g., hover:bg-slate-900 hover:text-white).",
+    "5": "Do not use completely transparent backgrounds for dropdowns, sticky headers, or dialogs. Always use solid or heavily blurred (backdrop-blur-xl) backgrounds.",
+    "6": "All interactive elements (buttons, inputs, links) MUST include a 'data-testid' attribute (e.g., data-testid='daily-sales-submit').",
+    "7": "Use Shadcn UI components for complex interactions (Tables, Dialogs, Select), but customize them to break the generic 'Vercel' look.",
+    "8": "Design must be fully responsive, heavily prioritizing mobile (80vh max height for images/modals on mobile)."
+  },
+  "instructions_to_main_agent": [
+    "Present the 4 design directions to the user clearly with their philosophies and color palettes.",
+    "Ask the user which direction they prefer (1, 2, 3, or 4).",
+    "Do NOT start coding the application components until the user has selected a design direction.",
+    "Once a direction is selected, update this JSON to reflect ONLY the chosen direction and proceed with implementation."
+  ]
+}
