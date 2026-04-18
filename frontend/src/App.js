@@ -946,12 +946,198 @@ const PartyStatement = () => {
     window.open(url, '_blank');
   };
 
+  // Build ledger entries with running balance
+  const buildLedgerEntries = () => {
+    if (!statement) return [];
+    
+    const entries = [];
+    const isBepari = partyType === "bepaari";
+    
+    // Add sales entries
+    statement.sales.forEach(s => {
+      entries.push({
+        date: s.date,
+        description: isBepari 
+          ? `Sale to ${s.dukandar_name} (${s.quantity} pcs @ ${s.rate})`
+          : `Purchase from ${s.bepaari_name} (${s.quantity} pcs @ ${s.rate})`,
+        debit: isBepari ? 0 : s.gross_amount,  // Dukandar: Purchase increases their debt
+        credit: isBepari ? s.gross_amount : 0,  // Bepaari: Sale increases our payable
+        type: 'sale'
+      });
+    });
+    
+    // Add cash entries
+    statement.cash_entries.forEach(c => {
+      const isPayment = c.sub_type === "PAYMENT" || c.sub_type === "RECEIPT";
+      const desc = isPayment 
+        ? `${c.sub_type} (${c.mode})` 
+        : `${c.sub_type} - ${c.particulars || c.mode}`;
+      
+      if (isBepari) {
+        // Bepaari: PAYMENT reduces our payable (debit), others are deductions (debit)
+        entries.push({
+          date: c.date,
+          description: desc,
+          debit: c.amount + (c.bf_disc || 0),
+          credit: 0,
+          type: 'cash'
+        });
+      } else {
+        // Dukandar: RECEIPT reduces their debt (credit)
+        entries.push({
+          date: c.date,
+          description: desc,
+          debit: 0,
+          credit: c.amount,
+          type: 'cash'
+        });
+        // BF Disc is also a credit (reduces their debt)
+        if (c.bf_disc > 0) {
+          entries.push({
+            date: c.date,
+            description: `BF DISC on above`,
+            debit: 0,
+            credit: c.bf_disc,
+            type: 'cash'
+          });
+        }
+      }
+    });
+    
+    // Add adjustments
+    if (statement.adjustments) {
+      statement.adjustments.forEach(a => {
+        entries.push({
+          date: a.date,
+          description: `JV: ${a.effect}`,
+          debit: a.direction === "DEBIT" ? a.amount : 0,
+          credit: a.direction === "CREDIT" ? a.amount : 0,
+          type: 'adjustment'
+        });
+      });
+    }
+    
+    // Add balance transfers
+    if (statement.balance_transfers) {
+      statement.balance_transfers.forEach(t => {
+        entries.push({
+          date: t.date,
+          description: `Transfer: ${t.effect}`,
+          debit: t.direction === "OUT" ? t.amount : 0,
+          credit: t.direction === "IN" ? t.amount : 0,
+          type: 'transfer'
+        });
+      });
+    }
+    
+    // Sort by date
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Calculate running balance
+    let balance = statement.summary.opening_balance || 0;
+    entries.forEach(e => {
+      if (isBepari) {
+        // Bepaari: Credits increase payable, Debits reduce it
+        balance = balance + e.credit - e.debit;
+      } else {
+        // Dukandar: Debits increase receivable, Credits reduce it
+        balance = balance + e.debit - e.credit;
+      }
+      e.balance = balance;
+    });
+    
+    return entries;
+  };
+
+  const ledgerEntries = statement ? buildLedgerEntries() : [];
+  const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
+  const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+
+  const handlePrint = () => {
+    if (!statement) return;
+    const printDate = new Date().toISOString().split('T')[0];
+    const isBepari = partyType === "bepaari";
+    const printWindow = window.open('', '_blank');
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Ledger - ${statement.party.name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
+          h1 { text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 18px; }
+          .subtitle { text-align: center; color: #666; margin-bottom: 5px; }
+          .period { text-align: center; color: #333; margin-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 6px 8px; }
+          th { background: #1a365d; color: white; text-align: center; }
+          td { text-align: right; }
+          td:first-child, td:nth-child(2) { text-align: left; }
+          .total-row { background: #f0f0f0; font-weight: bold; }
+          .opening-row { background: #e8f4f8; font-weight: bold; }
+          .closing-row { background: #d4edda; font-weight: bold; }
+          .print-footer { margin-top: 20px; text-align: center; font-size: 10px; color: #888; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <h1>LEDGER - ${statement.party.name}</h1>
+        <p class="subtitle">Phone: ${statement.party.phone || 'N/A'}</p>
+        <p class="period">Period: ${fromDate || 'Beginning'} to ${toDate || printDate}</p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:80px">Date</th>
+              <th>Description</th>
+              <th style="width:100px">${isBepari ? 'Debit (-)' : 'Debit (+)'}</th>
+              <th style="width:100px">${isBepari ? 'Credit (+)' : 'Credit (-)'}</th>
+              <th style="width:100px">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="opening-row">
+              <td>-</td>
+              <td>Opening Balance</td>
+              <td>-</td>
+              <td>-</td>
+              <td>${(statement.summary.opening_balance || 0).toLocaleString('en-IN')}</td>
+            </tr>
+            ${ledgerEntries.map(e => `
+              <tr>
+                <td>${e.date}</td>
+                <td>${e.description}</td>
+                <td>${e.debit > 0 ? e.debit.toLocaleString('en-IN') : '-'}</td>
+                <td>${e.credit > 0 ? e.credit.toLocaleString('en-IN') : '-'}</td>
+                <td>${e.balance.toLocaleString('en-IN')}</td>
+              </tr>
+            `).join('')}
+            <tr class="total-row">
+              <td colspan="2">TOTAL</td>
+              <td>${totalDebit.toLocaleString('en-IN')}</td>
+              <td>${totalCredit.toLocaleString('en-IN')}</td>
+              <td>-</td>
+            </tr>
+            <tr class="closing-row">
+              <td colspan="4">CLOSING BALANCE</td>
+              <td>${(ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].balance : statement.summary.opening_balance || 0).toLocaleString('en-IN')}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="print-footer">Generated from Mandi Accounting System on ${printDate}</p>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   const parties = partyType === "bepaari" ? bepaaris : dukandars;
 
   return (
     <div className="page">
-      <h2>Party Statement</h2>
-      <p className="hint">Get complete transaction history for any Bepaari or Dukandar. Useful for resolving disputes.</p>
+      <h2>Party Statement / Ledger</h2>
+      <p className="hint">Get complete transaction history with running balance. All entries in date sequence.</p>
       
       <div className="filter-bar">
         <select value={partyType} onChange={(e) => { setPartyType(e.target.value); setPartyId(""); setStatement(null); }}>
@@ -965,7 +1151,8 @@ const PartyStatement = () => {
         <label>From:</label><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         <label>To:</label><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         <button className="btn-primary" onClick={fetchStatement}>Get Statement</button>
-        {statement && <button className="btn-excel" onClick={downloadExcel}>Download Excel</button>}
+        {statement && <button className="btn-print" onClick={handlePrint}>🖨️ Print / Save PDF</button>}
+        {statement && <button className="btn-excel" onClick={downloadExcel}>Download CSV</button>}
       </div>
 
       {loading && <div className="loading">Loading...</div>}
@@ -974,94 +1161,49 @@ const PartyStatement = () => {
         <div className="statement-container">
           <div className="party-info">
             <h3>{statement.party.name}</h3>
-            <p>Phone: {statement.party.phone || "N/A"} | Opening Balance: {formatCurrency(statement.party.opening_balance)}</p>
+            <p>Phone: {statement.party.phone || "N/A"} | Period: {fromDate || "Beginning"} to {toDate || "Current"}</p>
           </div>
 
-          <div className="statement-section">
-            <h4>Sales ({statement.sales.length} entries)</h4>
+          <div className="ledger-table">
             <table>
-              <thead><tr><th>Date</th><th>{partyType === "bepaari" ? "Dukandar" : "Bepaari"}</th><th>Qty</th><th>Rate</th><th>Gross</th><th>Disc</th><th>Net</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>{partyType === "bepaari" ? "Debit (-)" : "Debit (+)"}</th>
+                  <th>{partyType === "bepaari" ? "Credit (+)" : "Credit (-)"}</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
               <tbody>
-                {statement.sales.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.date}</td><td>{partyType === "bepaari" ? s.dukandar_name : s.bepaari_name}</td>
-                    <td>{s.quantity}</td><td>{formatCurrency(s.rate)}</td><td>{formatCurrency(s.gross_amount)}</td>
-                    <td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
+                <tr className="opening-row">
+                  <td>-</td>
+                  <td><strong>Opening Balance</strong></td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td><strong>{formatCurrency(statement.summary.opening_balance || 0)}</strong></td>
+                </tr>
+                {ledgerEntries.map((e, i) => (
+                  <tr key={i} className={e.type === 'sale' ? 'sale-row' : e.type === 'adjustment' ? 'adjustment-row' : ''}>
+                    <td>{e.date}</td>
+                    <td>{e.description}</td>
+                    <td>{e.debit > 0 ? formatCurrency(e.debit) : "-"}</td>
+                    <td>{e.credit > 0 ? formatCurrency(e.credit) : "-"}</td>
+                    <td className={e.balance >= 0 ? "positive" : "negative"}>{formatCurrency(e.balance)}</td>
                   </tr>
                 ))}
+                <tr className="total-row">
+                  <td colSpan="2"><strong>TOTAL</strong></td>
+                  <td><strong>{formatCurrency(totalDebit)}</strong></td>
+                  <td><strong>{formatCurrency(totalCredit)}</strong></td>
+                  <td>-</td>
+                </tr>
+                <tr className="closing-row">
+                  <td colSpan="4"><strong>CLOSING BALANCE</strong></td>
+                  <td><strong>{formatCurrency(ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].balance : statement.summary.opening_balance || 0)}</strong></td>
+                </tr>
               </tbody>
             </table>
-          </div>
-
-          <div className="statement-section">
-            <h4>Payments/Receipts ({statement.cash_entries.length} entries)</h4>
-            <table>
-              <thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Amount</th><th>Mode</th></tr></thead>
-              <tbody>
-                {statement.cash_entries.map((c, i) => (
-                  <tr key={i}><td>{c.date}</td><td>{c.type}</td><td>{c.sub_type}</td><td>{formatCurrency(c.amount)}</td><td>{c.mode}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* NEW: Adjustments (JV) Section */}
-          {statement.adjustments && statement.adjustments.length > 0 && (
-            <div className="statement-section">
-              <h4>Adjustments / JV ({statement.adjustments.length} entries)</h4>
-              <table>
-                <thead><tr><th>Date</th><th>Direction</th><th>Effect</th><th>Amount</th><th>Narration</th></tr></thead>
-                <tbody>
-                  {statement.adjustments.map((a, i) => (
-                    <tr key={i} className={a.direction === "CREDIT" ? "credit-row" : "debit-row"}>
-                      <td>{a.date}</td>
-                      <td><span className={`badge ${a.direction.toLowerCase()}`}>{a.direction}</span></td>
-                      <td>{a.effect}</td>
-                      <td>{formatCurrency(a.amount)}</td>
-                      <td>{a.narration || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* NEW: Balance Transfers Section */}
-          {statement.balance_transfers && statement.balance_transfers.length > 0 && (
-            <div className="statement-section">
-              <h4>Balance Transfers ({statement.balance_transfers.length} entries)</h4>
-              <table>
-                <thead><tr><th>Date</th><th>Direction</th><th>Effect</th><th>Amount</th><th>Narration</th></tr></thead>
-                <tbody>
-                  {statement.balance_transfers.map((t, i) => (
-                    <tr key={i} className={t.direction === "IN" ? "credit-row" : "debit-row"}>
-                      <td>{t.date}</td>
-                      <td><span className={`badge ${t.direction === "IN" ? "credit" : "debit"}`}>{t.direction}</span></td>
-                      <td>{t.effect}</td>
-                      <td>{formatCurrency(t.amount)}</td>
-                      <td>{t.narration || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="summary-box">
-            <h4>Summary</h4>
-            <p>Total Sales: {formatCurrency(statement.summary.total_sales)} ({statement.summary.total_quantity} qty)</p>
-            <p>Total Discount: {formatCurrency(statement.summary.total_discount)}</p>
-            <p>Total {partyType === "bepaari" ? "Payments" : "Receipts"}: {formatCurrency(statement.summary.total_payments)}</p>
-            {statement.summary.total_adjustments > 0 && (
-              <p>Total Adjustments (JV): {formatCurrency(statement.summary.total_adjustments)}</p>
-            )}
-            {(statement.summary.transfers_in > 0 || statement.summary.transfers_out > 0) && (
-              <>
-                {statement.summary.transfers_in > 0 && <p>Balance Transfers In: {formatCurrency(statement.summary.transfers_in)}</p>}
-                {statement.summary.transfers_out > 0 && <p>Balance Transfers Out: {formatCurrency(statement.summary.transfers_out)}</p>}
-              </>
-            )}
-            <p>Opening Balance: {formatCurrency(statement.summary.opening_balance)}</p>
           </div>
         </div>
       )}

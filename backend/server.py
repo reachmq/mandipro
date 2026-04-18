@@ -206,7 +206,7 @@ async def get_daily_sales(
     if dukandar_id:
         query["dukandar_id"] = dukandar_id
     
-    sales = await db.daily_sales.find(query).sort("date", -1).to_list(5000)
+    sales = await db.daily_sales.find(query).sort([("date", -1), ("created_at", -1)]).to_list(5000)
     return serialize_docs(sales)
 
 @api_router.post("/daily-sales")
@@ -303,7 +303,7 @@ async def get_cash_book(
     if sub_type:
         query["sub_type"] = sub_type
     
-    entries = await db.cash_book.find(query).sort("date", -1).to_list(5000)
+    entries = await db.cash_book.find(query).sort([("date", -1), ("created_at", -1)]).to_list(5000)
     return serialize_docs(entries)
 
 @api_router.post("/cash-book")
