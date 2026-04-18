@@ -379,7 +379,56 @@ async def get_party_statement(
     if not party:
         raise HTTPException(status_code=404, detail="Party not found")
     
-    # Build date query
+    # Calculate opening balance as of from_date
+    # If from_date is specified, we need to calculate balance up to (from_date - 1 day)
+    original_opening = party.get("opening_balance", 0)
+    calculated_opening = original_opening
+    
+    if from_date:
+        # Get all transactions BEFORE from_date to calculate opening balance
+        prev_date_query = {"$lt": from_date}
+        
+        # Previous sales
+        prev_sales_query = {"bepaari_id" if party_type == "bepaari" else "dukandar_id": party_id, "date": prev_date_query}
+        prev_sales = await db.daily_sales.find(prev_sales_query).to_list(5000)
+        prev_sales_total = sum(s["gross_amount"] for s in prev_sales)
+        prev_discount_total = sum(s.get("discount", 0) for s in prev_sales)
+        
+        # Previous cash entries
+        prev_cash_query = {"party_id": party_id, "type": cash_type, "date": prev_date_query}
+        prev_cash = await db.cash_book.find(prev_cash_query).to_list(5000)
+        
+        # Previous adjustments
+        prev_adj = await db.adjustments.find({"date": prev_date_query}).to_list(5000)
+        
+        # Previous balance transfers
+        prev_transfers = await db.balance_transfers.find({
+            "$or": [{"from_party_id": party_id}, {"to_party_id": party_id}],
+            "date": prev_date_query
+        }).to_list(5000)
+        
+        if party_type == "bepaari":
+            prev_payments = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "PAYMENT")
+            prev_deductions = sum(c["amount"] for c in prev_cash if c.get("sub_type") != "PAYMENT")
+            prev_adj_credits = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id)
+            prev_adj_debits = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id)
+            prev_transfers_in = sum(t["amount"] for t in prev_transfers if t.get("to_party_id") == party_id)
+            prev_transfers_out = sum(t["amount"] for t in prev_transfers if t.get("from_party_id") == party_id)
+            
+            # Bepaari balance = Opening + Sales - Deductions - Payments - Adj_Credits + Adj_Debits + Transfers_In - Transfers_Out
+            calculated_opening = original_opening + prev_sales_total - prev_deductions - prev_payments - prev_adj_credits + prev_adj_debits + prev_transfers_in - prev_transfers_out
+        else:
+            prev_receipts = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "RECEIPT")
+            prev_bf_disc = sum(c.get("bf_disc", 0) for c in prev_cash)
+            prev_adj_debits = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id)
+            prev_adj_credits = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id)
+            prev_transfers_in = sum(t["amount"] for t in prev_transfers if t.get("to_party_id") == party_id)
+            prev_transfers_out = sum(t["amount"] for t in prev_transfers if t.get("from_party_id") == party_id)
+            
+            # Dukandar balance = Opening + Purchases - Discounts - Receipts - BF_Disc - Adj_Debits + Adj_Credits + Transfers_In - Transfers_Out
+            calculated_opening = original_opening + prev_sales_total - prev_discount_total - prev_receipts - prev_bf_disc - prev_adj_debits + prev_adj_credits + prev_transfers_in - prev_transfers_out
+    
+    # Build date query for filtered period
     date_query = {}
     if from_date and to_date:
         date_query = {"$gte": from_date, "$lte": to_date}
@@ -497,7 +546,7 @@ async def get_party_statement(
             "total_adjustments": adj_received + adj_paid,
             "transfers_in": transfers_in,
             "transfers_out": transfers_out,
-            "opening_balance": party.get("opening_balance", 0)
+            "opening_balance": calculated_opening
         }
     }
 
