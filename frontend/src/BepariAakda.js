@@ -144,21 +144,15 @@ const BepariAakda = () => {
                 <table className="sales-table">
                   <thead>
                     <tr>
-                      <th>Dukandar</th>
                       <th>Qty</th>
-                      <th>Rate</th>
                       <th>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedAakda.sales_detail.map((s, i) => (
-                      <tr key={i}>
-                        <td>{s.dukandar}</td>
-                        <td>{s.quantity}</td>
-                        <td>{formatCurrency(s.rate)}</td>
-                        <td>{formatCurrency(s.amount)}</td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <td>{selectedAakda.summary.quantity}</td>
+                      <td>{formatCurrency(selectedAakda.summary.gross_sales)}</td>
+                    </tr>
                   </tbody>
                 </table>
 

@@ -730,6 +730,7 @@ const BalanceTransfer = () => {
     to_party_id: "",
     to_party_name: "",
     amount: "",
+    narration: "",
     create_new: false
   });
   const [selectedEntries, setSelectedEntries] = useState([]);
@@ -800,7 +801,9 @@ const BalanceTransfer = () => {
         to_type: form.to_type,
         to_party_id: form.create_new ? null : form.to_party_id,
         to_party_name: form.create_new ? form.to_party_name : null,
-        amount: parseFloat(form.amount)
+        amount: parseFloat(form.amount),
+        date: new Date().toISOString().split('T')[0],
+        narration: form.narration
       });
 
       // Step 2: Reassign selected cash book entries
@@ -815,7 +818,7 @@ const BalanceTransfer = () => {
       setMessage(`✅ Transferred ₹${formatCurrency(form.amount)} from ${transferRes.data.from_party} to ${transferRes.data.to_party}. ${selectedEntries.length > 0 ? `Also moved ${selectedEntries.length} cash book entries.` : ''}`);
       
       // Reset form
-      setForm({ ...form, from_party_id: "", to_party_id: "", to_party_name: "", amount: "", create_new: false });
+      setForm({ ...form, from_party_id: "", to_party_id: "", to_party_name: "", amount: "", narration: "", create_new: false });
       setSelectedEntries([]);
       fetchData();
     } catch (err) {
@@ -890,6 +893,11 @@ const BalanceTransfer = () => {
         <input type="number" placeholder="Enter amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="amount-input" />
       </div>
 
+      <div className="narration-section">
+        <label>Comment / Narration (Optional):</label>
+        <input type="text" placeholder="Brief description of transfer" value={form.narration} onChange={(e) => setForm({ ...form, narration: e.target.value })} className="narration-input" />
+      </div>
+
       {cashBookEntries.length > 0 && (
         <div className="entries-section">
           <h3>Also Move These Cash & Bank Entries? (Optional)</h3>
@@ -953,58 +961,115 @@ const PartyStatement = () => {
     const entries = [];
     const isBepari = partyType === "bepaari";
     
-    // Add sales entries
-    statement.sales.forEach(s => {
-      entries.push({
-        date: s.date,
-        description: isBepari 
-          ? `Sale to ${s.dukandar_name} (${s.quantity} pcs @ ${s.rate})`
-          : `Purchase from ${s.bepaari_name} (${s.quantity} pcs @ ${s.rate})`,
-        debit: isBepari ? 0 : s.gross_amount,  // Dukandar: Purchase increases their debt
-        credit: isBepari ? s.gross_amount : 0,  // Bepaari: Sale increases our payable
-        type: 'sale'
-      });
-    });
-    
-    // Add cash entries
-    statement.cash_entries.forEach(c => {
-      const isPayment = c.sub_type === "PAYMENT" || c.sub_type === "RECEIPT";
-      const desc = isPayment 
-        ? `${c.sub_type} (${c.mode})` 
-        : `${c.sub_type} - ${c.particulars || c.mode}`;
+    if (isBepari) {
+      // BEPAARI LEDGER: Group sales by date, show NET amount only (like Aakda)
+      // NET = Gross Sales - Commission - JB - KK - Motor - Bhussa - Gawali - CashAdv
+      // DON'T show Dukandar names or individual expenses
       
-      if (isBepari) {
-        // Bepaari: PAYMENT reduces our payable (debit), others are deductions (debit)
+      // Group sales by date
+      const salesByDate = {};
+      statement.sales.forEach(s => {
+        if (!salesByDate[s.date]) {
+          salesByDate[s.date] = { qty: 0, gross: 0 };
+        }
+        salesByDate[s.date].qty += s.quantity;
+        salesByDate[s.date].gross += s.gross_amount;
+      });
+      
+      // Group expenses by date
+      const expensesByDate = {};
+      statement.cash_entries.forEach(c => {
+        if (c.sub_type !== "PAYMENT") {
+          // This is an expense (MOTOR, BHUSSA, GAWALI, CASH_ADV)
+          if (!expensesByDate[c.date]) {
+            expensesByDate[c.date] = 0;
+          }
+          expensesByDate[c.date] += c.amount;
+        }
+      });
+      
+      // Calculate commission, JB, KK per day (approximate based on qty)
+      // We'll get this from the Aakda-style calculation
+      const settings = { commission_rate: 4, jb_rate: 10, kk_fixed: 100 };
+      
+      // Add NET sales entries per date
+      Object.keys(salesByDate).sort().forEach(date => {
+        const s = salesByDate[date];
+        const commission = s.gross * (settings.commission_rate / 100);
+        const jb = s.qty * settings.jb_rate;
+        const kk = settings.kk_fixed; // Per market day
+        const otherExpenses = expensesByDate[date] || 0;
+        const netAmount = s.gross - commission - jb - kk - otherExpenses;
+        
         entries.push({
-          date: c.date,
-          description: desc,
-          debit: c.amount + (c.bf_disc || 0),
-          credit: 0,
-          type: 'cash'
+          date: date,
+          description: `Sales (${s.qty} pcs) - Net after deductions`,
+          debit: 0,
+          credit: netAmount,
+          type: 'sale'
         });
-      } else {
-        // Dukandar: RECEIPT reduces their debt (credit)
+      });
+      
+      // Add PAYMENT entries only (not other expenses - they're already deducted)
+      statement.cash_entries.forEach(c => {
+        if (c.sub_type === "PAYMENT") {
+          entries.push({
+            date: c.date,
+            description: `Payment (${c.mode})`,
+            debit: c.amount,
+            credit: 0,
+            type: 'cash'
+          });
+        }
+      });
+      
+    } else {
+      // DUKANDAR LEDGER: Show purchases, discounts, and receipts
+      
+      // Add sales/purchase entries
+      statement.sales.forEach(s => {
+        entries.push({
+          date: s.date,
+          description: `Purchase from ${s.bepaari_name} (${s.quantity} pcs)`,
+          debit: s.gross_amount,
+          credit: 0,
+          type: 'sale'
+        });
+        // If there's a discount on this sale, show it as credit
+        if (s.discount > 0) {
+          entries.push({
+            date: s.date,
+            description: `Discount on above`,
+            debit: 0,
+            credit: s.discount,
+            type: 'discount'
+          });
+        }
+      });
+      
+      // Add receipt entries
+      statement.cash_entries.forEach(c => {
         entries.push({
           date: c.date,
-          description: desc,
+          description: `${c.sub_type} (${c.mode})`,
           debit: 0,
           credit: c.amount,
           type: 'cash'
         });
-        // BF Disc is also a credit (reduces their debt)
+        // BF Disc is also a credit
         if (c.bf_disc > 0) {
           entries.push({
             date: c.date,
-            description: `BF DISC on above`,
+            description: `BF Discount`,
             debit: 0,
             credit: c.bf_disc,
             type: 'cash'
           });
         }
-      }
-    });
+      });
+    }
     
-    // Add adjustments
+    // Add adjustments (for both)
     if (statement.adjustments) {
       statement.adjustments.forEach(a => {
         entries.push({
@@ -1017,7 +1082,7 @@ const PartyStatement = () => {
       });
     }
     
-    // Add balance transfers
+    // Add balance transfers (for both)
     if (statement.balance_transfers) {
       statement.balance_transfers.forEach(t => {
         entries.push({
@@ -1052,6 +1117,18 @@ const PartyStatement = () => {
   const ledgerEntries = statement ? buildLedgerEntries() : [];
   const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
   const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+  const closingBalance = ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].balance : (statement?.summary?.opening_balance || 0);
+  
+  // Determine closing balance label
+  const getClosingLabel = () => {
+    if (!statement) return "";
+    const name = statement.party.name;
+    if (partyType === "bepaari") {
+      return closingBalance >= 0 ? `To Pay ${name}` : `To Receive from ${name}`;
+    } else {
+      return closingBalance >= 0 ? `To Receive from ${name}` : `To Pay ${name}`;
+    }
+  };
 
   const handlePrint = () => {
     if (!statement) return;
@@ -1118,8 +1195,8 @@ const PartyStatement = () => {
               <td>-</td>
             </tr>
             <tr class="closing-row">
-              <td colspan="4">CLOSING BALANCE</td>
-              <td>${(ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].balance : statement.summary.opening_balance || 0).toLocaleString('en-IN')}</td>
+              <td colspan="4">${getClosingLabel()}</td>
+              <td>${Math.abs(closingBalance).toLocaleString('en-IN')}</td>
             </tr>
           </tbody>
         </table>
@@ -1199,8 +1276,8 @@ const PartyStatement = () => {
                   <td>-</td>
                 </tr>
                 <tr className="closing-row">
-                  <td colSpan="4"><strong>CLOSING BALANCE</strong></td>
-                  <td><strong>{formatCurrency(ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].balance : statement.summary.opening_balance || 0)}</strong></td>
+                  <td colSpan="4"><strong>{getClosingLabel()}</strong></td>
+                  <td><strong>{formatCurrency(Math.abs(closingBalance))}</strong></td>
                 </tr>
               </tbody>
             </table>
