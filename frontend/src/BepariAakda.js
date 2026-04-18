@@ -84,9 +84,10 @@ const BepariAakda = () => {
               qty: acc.qty + (a.summary.quantity || 0),
               gross: acc.gross + (a.summary.gross_sales || 0),
               commission: acc.commission + (a.summary.commission || 0),
-              deductions: acc.deductions + (a.summary.total_deductions || 0),
+              discounts: acc.discounts + (a.sales_detail || []).reduce((s, d) => s + (d.discount || 0), 0),
               net: acc.net + (a.summary.net_amount || 0),
-            }), { qty: 0, gross: 0, commission: 0, deductions: 0, net: 0 });
+            }), { qty: 0, gross: 0, commission: 0, discounts: 0, net: 0 });
+            const netCommission = totals.commission - totals.discounts;
             return (
               <div className="daily-summary-banner" data-testid="daily-summary-banner">
                 <div className="daily-summary-header">
@@ -103,8 +104,9 @@ const BepariAakda = () => {
                     <span className="stat-value gross">{formatCurrency(totals.gross)}</span>
                   </div>
                   <div className="summary-stat" data-testid="daily-commission">
-                    <span className="stat-label">Commission Earned</span>
-                    <span className="stat-value commission">{formatCurrency(totals.commission)}</span>
+                    <span className="stat-label">Net Commission</span>
+                    <span className="stat-value commission">{formatCurrency(netCommission)}</span>
+                    <span className="stat-detail">Gross: {formatCurrency(totals.commission)} | Disc: -{formatCurrency(totals.discounts)}</span>
                   </div>
                   <div className="summary-stat" data-testid="daily-net-amount">
                     <span className="stat-label">Net Payable</span>

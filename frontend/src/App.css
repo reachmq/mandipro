@@ -757,6 +757,14 @@ tr:hover {
 .stat-value.commission { color: #68d391; }
 .stat-value.net { color: #fc8181; }
 
+.stat-detail {
+  display: block;
+  font-size: 10px;
+  opacity: 0.6;
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
 @media (max-width: 768px) {
   .daily-summary-cards {
     grid-template-columns: repeat(2, 1fr);
