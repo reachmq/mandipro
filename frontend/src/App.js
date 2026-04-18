@@ -1072,13 +1072,27 @@ const PartyStatement = () => {
     // Add adjustments (for both)
     if (statement.adjustments) {
       statement.adjustments.forEach(a => {
-        entries.push({
-          date: a.date,
-          description: `JV: ${a.effect}`,
-          debit: a.direction === "DEBIT" ? a.amount : 0,
-          credit: a.direction === "CREDIT" ? a.amount : 0,
-          type: 'adjustment'
-        });
+        if (isBepari) {
+          // Bepaari: CREDIT = someone paid them (reduces our payable) -> Credit in ledger
+          // DEBIT = they paid someone (rare) -> Debit in ledger
+          entries.push({
+            date: a.date,
+            description: `JV: ${a.effect}`,
+            debit: a.direction === "DEBIT" ? a.amount : 0,
+            credit: a.direction === "CREDIT" ? a.amount : 0,
+            type: 'adjustment'
+          });
+        } else {
+          // Dukandar: DEBIT = they paid someone on our behalf (reduces THEIR debt) -> Credit in ledger
+          // CREDIT = they received something (increases debt) -> Debit in ledger
+          entries.push({
+            date: a.date,
+            description: `JV: ${a.effect}`,
+            debit: a.direction === "CREDIT" ? a.amount : 0,  // INVERTED for Dukandar
+            credit: a.direction === "DEBIT" ? a.amount : 0,   // INVERTED for Dukandar
+            type: 'adjustment'
+          });
+        }
       });
     }
     
