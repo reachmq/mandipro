@@ -1044,10 +1044,11 @@ const PartyStatement = () => {
       
       // Add sales/purchase entries
       statement.sales.forEach(s => {
+        const purchaseAmt = s.dukandar_amount || s.gross_amount;
         entries.push({
           date: s.date,
-          description: `Purchase from ${s.bepaari_name} (${s.quantity} pcs)`,
-          debit: s.gross_amount,
+          description: `Purchase from ${s.bepaari_name} (${s.quantity} pcs)${s.dukandar_rate ? ` @ ${formatCurrency(s.dukandar_rate)}` : ''}`,
+          debit: purchaseAmt,
           credit: 0,
           type: 'sale'
         });

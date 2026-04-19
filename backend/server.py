@@ -1351,13 +1351,19 @@ async def get_bepaari_aakda(date: str):
         
         # Sales breakdown by Dukandar
         sales_detail = []
+        today_rate_diff = 0
         for s in b_sales_today:
+            duk_amt = s.get("dukandar_amount")
+            if duk_amt:
+                today_rate_diff += (duk_amt - s["gross_amount"])
             sales_detail.append({
                 "dukandar": s["dukandar_name"],
                 "quantity": s["quantity"],
                 "rate": s["rate"],
                 "amount": s["gross_amount"],
-                "discount": s["discount"]
+                "discount": s["discount"],
+                "dukandar_rate": s.get("dukandar_rate"),
+                "dukandar_amount": duk_amt
             })
         
         aakda_list.append({
@@ -1372,6 +1378,7 @@ async def get_bepaari_aakda(date: str):
                 "quantity": today_qty,
                 "commission": today_comm,
                 "commission_pct": b.get("commission_percent", settings.get("commission_rate", 4)),
+                "rate_diff": today_rate_diff,
                 "kk": today_kk,
                 "jb": today_jb,
                 "jb_rate": settings.get("jb_rate", 10),
