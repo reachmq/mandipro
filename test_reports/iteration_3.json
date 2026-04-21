@@ -1,0 +1,96 @@
+{
+  "summary": "Completed testing of Expense Write-offs via Adjustments/JV page feature. All 10 backend API tests passed. UI testing confirmed JV form shows Expense Heads optgroup with Mandi Expense and BF Discount options. Party dropdown correctly hides when expense head is selected. Balance Sheet tallies after write-offs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dukandar Ledger",
+        "issues": ["The 'writeoffs' field from API is not displayed as a separate column. Currently only 'Adj' column is shown which represents party-to-party adjustments. Consider adding a 'Writeoffs' column to show expense write-offs separately."]
+      },
+      {
+        "screen": "Bepaari Ledger",
+        "issues": ["The 'expense_writeoffs' field from API is not displayed as a separate column. Consider adding an 'Exp W/O' column to show expense write-offs that increase bepaari payable."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_expense_writeoffs.py",
+    "/app/test_reports/pytest/pytest_expense_writeoffs.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Add 'Writeoffs' column to Dukandar Ledger UI to display expense write-offs separately from party-to-party adjustments",
+    "OPTIONAL: Add 'Exp W/O' column to Bepaari Ledger UI to display expense write-offs that increase bepaari payable"
+  ],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_expense_writeoffs.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": "None required - app uses MongoDB locally",
+  "seed_data_creation": "Test adjustments created and deleted during testing. Used existing Bepaari: KISHOR (b6718523-6cfe-41fe-930c-d97ffd7f008f) and Dukandar: ARIF (0d95f9c9-626f-4faf-a7ab-3c14fca2bf65)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Expense Write-offs feature fully tested and working. Key findings: 1) POST /api/adjustments with debit_type=BF_DISCOUNT or MANDI_EXPENSE creates expense write-offs correctly using synthetic IDs __BF_DISCOUNT__ and __MANDI_EXPENSE__. 2) Dukandar write-off (DEBIT expense head, CREDIT DUKANDAR) reduces dukandar receivable and increases BF Disc/Mandi Exp in Balance Sheet. 3) Bepaari extra payment (DEBIT expense head, CREDIT BEPAARI) increases bepaari payable and increases expense in Balance Sheet. 4) Balance Sheet always tallies (difference=0) after write-offs. 5) Party-to-party JVs still work correctly (no regression). 6) JV form shows 'Expense Heads (Write-off)' optgroup with 'Mandi Expense' and 'BF Discount' options. 7) Party dropdown hides when expense head is selected on Debit side. 8) API returns 'writeoffs' field for Dukandar Ledger and 'expense_writeoffs' field for Bepaari Ledger, but these are not displayed as separate columns in UI (minor enhancement opportunity).",
+  "features_tested": {
+    "bf_discount_writeoff_dukandar": {
+      "status": "PASS",
+      "details": "POST /api/adjustments with debit_type=BF_DISCOUNT, credit_type=DUKANDAR creates write-off correctly. Dukandar balance reduces, writeoffs field populated, BF Disc total increases in Balance Sheet."
+    },
+    "mandi_expense_writeoff_bepaari": {
+      "status": "PASS",
+      "details": "POST /api/adjustments with debit_type=MANDI_EXPENSE, credit_type=BEPAARI creates extra payment correctly. Bepaari balance increases, expense_writeoffs field populated, Mandi Exp total increases in Balance Sheet."
+    },
+    "dukandar_ledger_writeoffs": {
+      "status": "PASS",
+      "details": "Dukandar Ledger API returns 'writeoffs' field correctly populated after BF_DISCOUNT write-off."
+    },
+    "bepaari_ledger_expense_writeoffs": {
+      "status": "PASS",
+      "details": "Bepaari Ledger API returns 'expense_writeoffs' field correctly populated after MANDI_EXPENSE write-off."
+    },
+    "balance_sheet_bf_disc_increases": {
+      "status": "PASS",
+      "details": "Balance Sheet BF Discount total increases when BF_DISCOUNT debit write-off created."
+    },
+    "balance_sheet_mandi_exp_increases": {
+      "status": "PASS",
+      "details": "Balance Sheet Mandi Expenses total increases when MANDI_EXPENSE debit write-off created."
+    },
+    "balance_sheet_tallies": {
+      "status": "PASS",
+      "details": "Balance Sheet difference = 0 after all write-offs. Liabilities and Assets remain balanced."
+    },
+    "patti_decreases_after_writeoff": {
+      "status": "PASS",
+      "details": "Patti (dukandar receivable) decreases after dukandar write-off."
+    },
+    "bepaari_payables_increases": {
+      "status": "PASS",
+      "details": "Bepaari Payables increases after bepaari extra payment (expense write-off)."
+    },
+    "jv_form_expense_heads_optgroup": {
+      "status": "PASS",
+      "details": "JV form shows 'Expense Heads (Write-off)' optgroup with 'Mandi Expense' and 'BF Discount' options on both Debit and Credit sides."
+    },
+    "party_dropdown_hides_for_expense_head": {
+      "status": "PASS",
+      "details": "Party dropdown correctly hides when expense head is selected on Debit side."
+    },
+    "party_to_party_jv_no_regression": {
+      "status": "PASS",
+      "details": "Existing party-to-party JVs (e.g., ADVANCE -> BEPAARI) still work correctly. No regression."
+    },
+    "delete_adjustment_restores_balances": {
+      "status": "PASS",
+      "details": "Deleting an expense write-off correctly restores original balances in ledgers and Balance Sheet."
+    }
+  }
+}

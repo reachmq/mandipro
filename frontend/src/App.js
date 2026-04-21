@@ -560,18 +560,31 @@ const Adjustments = () => {
     if (type === "CAPITAL") return capitalPartners.filter(p => p.partner_type === "CAPITAL");
     if (type === "LOAN") return capitalPartners.filter(p => p.partner_type === "LOAN");
     if (type === "AMANAT") return capitalPartners.filter(p => p.partner_type === "AMANAT");
+    if (type === "MANDI_EXPENSE" || type === "BF_DISCOUNT") return []; // No party needed
     return [];
   };
 
+  const isExpenseHead = (type) => type === "MANDI_EXPENSE" || type === "BF_DISCOUNT";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.debit_type || !form.debit_party_id || !form.credit_type || !form.credit_party_id) {
-      alert("Please select both Debit and Credit parties");
+    if (!form.debit_type || !form.credit_type) {
+      alert("Please select both Debit and Credit types");
+      return;
+    }
+    if (!isExpenseHead(form.debit_type) && !form.debit_party_id) {
+      alert("Please select a Debit party");
+      return;
+    }
+    if (!isExpenseHead(form.credit_type) && !form.credit_party_id) {
+      alert("Please select a Credit party");
       return;
     }
     await axios.post(`${API}/adjustments`, {
       ...form,
-      amount: parseFloat(form.amount)
+      amount: parseFloat(form.amount),
+      debit_party_id: isExpenseHead(form.debit_type) ? `__${form.debit_type}__` : form.debit_party_id,
+      credit_party_id: isExpenseHead(form.credit_type) ? `__${form.credit_type}__` : form.credit_party_id
     });
     setForm({
       ...form,
@@ -631,37 +644,53 @@ const Adjustments = () => {
         
         <div className="jv-row">
           <div className="jv-section debit-section">
-            <label>DEBIT - Who Paid? (Dukandar/Advance)</label>
+            <label>DEBIT</label>
             <select value={form.debit_type} onChange={(e) => setForm({ ...form, debit_type: e.target.value, debit_party_id: "" })} required>
               <option value="">Select Type</option>
-              <option value="DUKANDAR">Dukandar</option>
-              <option value="ADVANCE">Advance Party</option>
-              <option value="BEPAARI">Bepaari</option>
-              <option value="CAPITAL">Capital</option>
-              <option value="LOAN">Loan</option>
-              <option value="AMANAT">Amanat</option>
+              <optgroup label="Parties">
+                <option value="DUKANDAR">Dukandar</option>
+                <option value="ADVANCE">Advance Party</option>
+                <option value="BEPAARI">Bepaari</option>
+                <option value="CAPITAL">Capital</option>
+                <option value="LOAN">Loan</option>
+                <option value="AMANAT">Amanat</option>
+              </optgroup>
+              <optgroup label="Expense Heads (Write-off)">
+                <option value="MANDI_EXPENSE">Mandi Expense</option>
+                <option value="BF_DISCOUNT">BF Discount</option>
+              </optgroup>
             </select>
-            <select value={form.debit_party_id} onChange={(e) => setForm({ ...form, debit_party_id: e.target.value })} required disabled={!form.debit_type}>
-              <option value="">Select Party</option>
-              {getParties(form.debit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            {!isExpenseHead(form.debit_type) && (
+              <select value={form.debit_party_id} onChange={(e) => setForm({ ...form, debit_party_id: e.target.value })} required={!isExpenseHead(form.debit_type)} disabled={!form.debit_type}>
+                <option value="">Select Party</option>
+                {getParties(form.debit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
           </div>
 
           <div className="jv-section credit-section">
-            <label>CREDIT - Who Received? (Bepaari)</label>
+            <label>CREDIT</label>
             <select value={form.credit_type} onChange={(e) => setForm({ ...form, credit_type: e.target.value, credit_party_id: "" })} required>
               <option value="">Select Type</option>
-              <option value="BEPAARI">Bepaari</option>
-              <option value="DUKANDAR">Dukandar</option>
-              <option value="ADVANCE">Advance Party</option>
-              <option value="CAPITAL">Capital</option>
-              <option value="LOAN">Loan</option>
-              <option value="AMANAT">Amanat</option>
+              <optgroup label="Parties">
+                <option value="BEPAARI">Bepaari</option>
+                <option value="DUKANDAR">Dukandar</option>
+                <option value="ADVANCE">Advance Party</option>
+                <option value="CAPITAL">Capital</option>
+                <option value="LOAN">Loan</option>
+                <option value="AMANAT">Amanat</option>
+              </optgroup>
+              <optgroup label="Expense Heads (Write-off)">
+                <option value="MANDI_EXPENSE">Mandi Expense</option>
+                <option value="BF_DISCOUNT">BF Discount</option>
+              </optgroup>
             </select>
-            <select value={form.credit_party_id} onChange={(e) => setForm({ ...form, credit_party_id: e.target.value })} required disabled={!form.credit_type}>
-              <option value="">Select Party</option>
-              {getParties(form.credit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            {!isExpenseHead(form.credit_type) && (
+              <select value={form.credit_party_id} onChange={(e) => setForm({ ...form, credit_party_id: e.target.value })} required={!isExpenseHead(form.credit_type)} disabled={!form.credit_type}>
+                <option value="">Select Party</option>
+                {getParties(form.credit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
           </div>
         </div>
 
@@ -1088,27 +1117,52 @@ const PartyStatement = () => {
     
     // Add adjustments (for both)
     if (statement.adjustments) {
+      const expenseHeads = ["MANDI_EXPENSE", "BF_DISCOUNT"];
       statement.adjustments.forEach(a => {
+        const isExpenseWriteoff = expenseHeads.includes(a.debit_type) || expenseHeads.includes(a.credit_type);
+        
         if (isBepari) {
-          // Bepaari: CREDIT = someone paid them (reduces our payable) -> Credit in ledger
-          // DEBIT = they paid someone (rare) -> Debit in ledger
-          entries.push({
-            date: a.date,
-            description: `JV: ${a.effect}`,
-            debit: a.direction === "DEBIT" ? a.amount : 0,
-            credit: a.direction === "CREDIT" ? a.amount : 0,
-            type: 'adjustment'
-          });
+          if (a.direction === "CREDIT" && isExpenseWriteoff) {
+            // Expense write-off CREDIT to Bepaari = increases our payable (extra payment)
+            entries.push({
+              date: a.date,
+              description: `Write-off: ${a.debit_party_name} (${a.narration || 'Expense adjustment'})`,
+              debit: 0,
+              credit: a.amount,
+              type: 'adjustment'
+            });
+          } else {
+            // Party-to-party: CREDIT = someone paid them (reduces payable) -> Debit in running bal
+            // DEBIT = they paid someone -> Credit in running bal
+            entries.push({
+              date: a.date,
+              description: `JV: ${a.effect}`,
+              debit: a.direction === "CREDIT" ? a.amount : 0,  // CREDIT from party = reduces payable = debit col
+              credit: a.direction === "DEBIT" ? a.amount : 0,
+              type: 'adjustment'
+            });
+          }
         } else {
-          // Dukandar: DEBIT = they paid someone on our behalf (reduces THEIR debt) -> Credit in ledger
-          // CREDIT = they received something (increases debt) -> Debit in ledger
-          entries.push({
-            date: a.date,
-            description: `JV: ${a.effect}`,
-            debit: a.direction === "CREDIT" ? a.amount : 0,  // INVERTED for Dukandar
-            credit: a.direction === "DEBIT" ? a.amount : 0,   // INVERTED for Dukandar
-            type: 'adjustment'
-          });
+          if (a.direction === "CREDIT" && isExpenseWriteoff) {
+            // Expense write-off CREDIT to Dukandar = reduces receivable
+            entries.push({
+              date: a.date,
+              description: `Write-off: ${a.debit_party_name} (${a.narration || 'Expense adjustment'})`,
+              debit: 0,
+              credit: a.amount,
+              type: 'adjustment'
+            });
+          } else {
+            // Dukandar: DEBIT = they paid someone (reduces debt) -> Credit in ledger
+            // CREDIT from party = increases debt -> Debit in ledger
+            entries.push({
+              date: a.date,
+              description: `JV: ${a.effect}`,
+              debit: a.direction === "CREDIT" ? a.amount : 0,
+              credit: a.direction === "DEBIT" ? a.amount : 0,
+              type: 'adjustment'
+            });
+          }
         }
       });
     }
