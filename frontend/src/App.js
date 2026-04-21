@@ -1670,6 +1670,55 @@ const BepariLedger = () => {
     pay: acc.pay + b.payments, adj: acc.adj + (b.adjustments || 0), bal: acc.bal + b.balance
   }), { gross: 0, qty: 0, comm: 0, kk: 0, jb: 0, ded: 0, pay: 0, adj: 0, bal: 0 });
 
+  const handlePrint = () => {
+    const printDate = new Date().toLocaleDateString('en-IN');
+    const printContent = `
+      <html><head><title>Bepaari Ledger</title>
+      <style>
+        body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 20px; font-size: 12px; }
+        h1 { font-family: 'Cormorant Garamond', Georgia, serif; color: #1B2A4A; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { color: #475569; font-size: 12px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1B2A4A; color: white; padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; }
+        th:first-child { text-align: left; }
+        td { padding: 6px; border-bottom: 1px solid #e2e8f0; text-align: right; font-size: 11px; }
+        td:first-child { text-align: left; font-weight: 600; }
+        .total-row td { border-top: 2px solid #1B2A4A; font-weight: 700; }
+        .positive { color: #166534; }
+        .negative { color: #991B1B; }
+        .footer { text-align: center; margin-top: 16px; font-size: 10px; color: #888; }
+        @media print { body { padding: 10px; } }
+      </style></head><body>
+        <h1>BEPAARI LEDGER</h1>
+        <p class="subtitle">${asOnDate ? 'As on: ' + asOnDate : 'Current'} | Generated: ${printDate}</p>
+        <table>
+          <thead><tr><th>Name</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Adj</th><th>Balance</th></tr></thead>
+          <tbody>
+            ${sortedLedger.map(b => `
+              <tr>
+                <td>${b.name}</td><td>${b.opening.toLocaleString('en-IN')}</td><td>${b.gross_sales.toLocaleString('en-IN')}</td>
+                <td>${b.quantity}</td><td>${b.commission.toLocaleString('en-IN')}</td><td>${b.kk.toLocaleString('en-IN')}</td><td>${b.jb.toLocaleString('en-IN')}</td>
+                <td>${b.total_deductions.toLocaleString('en-IN')}</td><td>${b.payments.toLocaleString('en-IN')}</td>
+                <td>${b.adjustments > 0 ? b.adjustments.toLocaleString('en-IN') : '-'}</td>
+                <td class="${b.balance >= 0 ? 'positive' : 'negative'}">${b.balance.toLocaleString('en-IN')}</td>
+              </tr>
+            `).join('')}
+            <tr class="total-row">
+              <td>TOTAL</td><td>-</td><td>${totals.gross.toLocaleString('en-IN')}</td><td>${totals.qty}</td>
+              <td>${totals.comm.toLocaleString('en-IN')}</td><td>${totals.kk.toLocaleString('en-IN')}</td><td>${totals.jb.toLocaleString('en-IN')}</td>
+              <td>${totals.ded.toLocaleString('en-IN')}</td><td>${totals.pay.toLocaleString('en-IN')}</td>
+              <td>${totals.adj > 0 ? totals.adj.toLocaleString('en-IN') : '-'}</td><td>${totals.bal.toLocaleString('en-IN')}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="footer">Generated from Mandi Accounting System on ${printDate}</p>
+      </body></html>`;
+    const w = window.open('', '', 'width=1000,height=700');
+    w.document.write(printContent);
+    w.document.close();
+    w.print();
+  };
+
   return (
     <div className="page">
       <h2>Bepaari Ledger</h2>
@@ -1677,6 +1726,7 @@ const BepariLedger = () => {
         <label>As On Date:</label>
         <input type="date" value={asOnDate} onChange={(e) => setAsOnDate(e.target.value)} />
         {asOnDate && <button className="btn-clear" onClick={() => setAsOnDate("")}>Show Current</button>}
+        <button className="btn-print" onClick={handlePrint} data-testid="bepaari-print-btn">Print / Save PDF</button>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
           <option value="name-asc">Name (A-Z)</option>
           <option value="name-desc">Name (Z-A)</option>
