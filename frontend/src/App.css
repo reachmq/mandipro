@@ -738,6 +738,86 @@ tr:hover {
   border-radius: 8px;
 }
 
+/* Desktop/Mobile toggle classes */
+.mobile-only { display: none; }
+.desktop-only { display: block; }
+
+/* Mobile Entry Cards */
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mobile-entry-card {
+  background: #fff;
+  border: 1px solid #E2E0D8;
+  padding: 14px;
+}
+.mec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.mec-date {
+  font-size: 12px;
+  color: #475569;
+}
+.mec-net {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1B2A4A;
+}
+.mec-parties {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.mec-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 8px;
+}
+.mec-details span {
+  background: #F9F8F6;
+  padding: 2px 8px;
+  border: 1px solid #E2E0D8;
+}
+.mec-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.mec-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  background: #1B2A4A;
+  color: white;
+  margin-right: 4px;
+  text-transform: uppercase;
+}
+.mec-badge.sub {
+  background: #C5A55A;
+  color: #1B2A4A;
+}
+.mec-badge.mode {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #E2E0D8;
+}
+.mec-party-name {
+  font-weight: 600;
+  color: #1B2A4A;
+  font-size: 14px;
+  margin: 4px 0;
+}
+
 /* Loading */
 .loading {
   display: flex;
@@ -824,6 +904,25 @@ tr:hover {
   }
   .table-container {
     overflow-x: auto;
+  }
+  /* Toggle table vs cards on mobile */
+  .desktop-only { display: none !important; }
+  .mobile-only { display: block !important; }
+  /* Better form spacing on mobile */
+  .entry-form {
+    padding: 16px;
+    gap: 10px;
+  }
+  .form-calc {
+    font-size: 16px;
+    padding: 8px 0;
+    text-align: center;
+    width: 100%;
+    border-top: 1px dashed #C5A55A;
+  }
+  .page h2 {
+    font-size: 20px;
+    margin-bottom: 16px;
   }
 }
 

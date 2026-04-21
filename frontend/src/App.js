@@ -357,7 +357,7 @@ const DailySales = () => {
         <button className="btn-clear" onClick={clearFilters}>Clear</button>
       </div>
 
-      <div className="table-container">
+      <div className="table-container desktop-only">
         <table>
           <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Duk. Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Actions</th></tr></thead>
           <tbody>
@@ -375,6 +375,31 @@ const DailySales = () => {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card Layout */}
+      <div className="mobile-cards mobile-only">
+        {sales.map((s) => (
+          <div key={s.id} className="mobile-entry-card" data-testid="sale-card">
+            <div className="mec-header">
+              <span className="mec-date">{s.date}</span>
+              <span className="mec-net">{formatCurrency(s.net_amount)}</span>
+            </div>
+            <div className="mec-parties">
+              <strong>{s.bepaari_name}</strong> <span className="dalal-arrow">&rarr;</span> {s.dukandar_name}
+            </div>
+            <div className="mec-details">
+              <span>{s.quantity} pcs @ {formatCurrency(s.rate)}</span>
+              <span>Gross: {formatCurrency(s.gross_amount)}</span>
+              {s.discount > 0 && <span>Disc: -{formatCurrency(s.discount)}</span>}
+              {s.dukandar_rate && <span>Duk Rate: {formatCurrency(s.dukandar_rate)}</span>}
+            </div>
+            <div className="mec-actions">
+              <button className="btn-edit" onClick={() => handleEdit(s)}>Edit</button>
+              <button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Edit Modal */}
@@ -604,7 +629,7 @@ const CashBook = () => {
         </div>
       )}
 
-      <div className="table-container">
+      <div className="table-container desktop-only">
         <table>
           <thead>
             <tr>
@@ -654,6 +679,32 @@ const CashBook = () => {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card Layout */}
+      <div className="mobile-cards mobile-only">
+        {sortedEntries.map((e) => (
+          <div key={e.id} className="mobile-entry-card" data-testid="cash-card">
+            <div className="mec-header">
+              <span className="mec-date">{e.date}</span>
+              <span className="mec-net">{formatCurrency(e.amount)}</span>
+            </div>
+            <div className="mec-parties">
+              <span className="mec-badge">{e.type}</span>
+              <span className="mec-badge sub">{e.sub_type}</span>
+              <span className="mec-badge mode">{e.mode}</span>
+            </div>
+            {e.party_name && <div className="mec-party-name">{e.party_name}</div>}
+            <div className="mec-details">
+              {e.bf_disc > 0 && <span>BF Disc: {formatCurrency(e.bf_disc)}</span>}
+              {e.particulars && <span>{e.particulars}</span>}
+            </div>
+            <div className="mec-actions">
+              <button className="btn-edit" onClick={() => handleEdit(e)}>Edit</button>
+              <button className="btn-delete" onClick={() => handleDelete(e.id)}>X</button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Edit Modal */}
