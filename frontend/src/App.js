@@ -1094,24 +1094,19 @@ const PartyStatement = () => {
       });
       
       // Add receipt entries
+      // Receipt amount = full settlement (includes bf_disc portion)
+      // bf_disc is NOT a separate credit — it's just tracking how much of the receipt was a discount
       statement.cash_entries.forEach(c => {
+        const desc = c.bf_disc > 0
+          ? `${c.sub_type} (${c.mode}) [incl. BF Disc ${formatCurrency(c.bf_disc)}]`
+          : `${c.sub_type} (${c.mode})`;
         entries.push({
           date: c.date,
-          description: `${c.sub_type} (${c.mode})`,
+          description: desc,
           debit: 0,
           credit: c.amount,
           type: 'cash'
         });
-        // BF Disc is also a credit
-        if (c.bf_disc > 0) {
-          entries.push({
-            date: c.date,
-            description: `BF Discount`,
-            debit: 0,
-            credit: c.bf_disc,
-            type: 'cash'
-          });
-        }
       });
     }
     
@@ -1692,7 +1687,7 @@ const BalanceSheet = () => {
               <tr className="sub-item"><td>JB Total</td><td>{formatCurrency(L.jb.total)}</td></tr>
               <tr className="sub-item"><td>KK Total</td><td>{formatCurrency(L.kk.total)}</td></tr>
               <tr className="sub-item"><td>Commission Total</td><td>{formatCurrency(L.commission.total)}</td></tr>
-              {L.commission.rate_diff > 0 && <tr className="sub-item" style={{fontSize:'11px',color:'#718096'}}><td>&nbsp;&nbsp;(incl. Rate Diff: {formatCurrency(L.commission.rate_diff)})</td><td></td></tr>}
+              <tr className="sub-item" style={{fontSize:'11px',color:'#718096'}}><td>&nbsp;&nbsp;Gross Earned: {formatCurrency(L.commission.earned)}{L.commission.rate_diff > 0 ? ` + Rate Diff: ${formatCurrency(L.commission.rate_diff)}` : ''} − Discounts: {formatCurrency(L.commission.discounts)}</td><td></td></tr>
               {L.zakat > 0 && <tr><td>Zakat Payable</td><td>{formatCurrency(L.zakat)}</td></tr>}
               <tr className="total-row"><td><strong>TOTAL LIABILITIES</strong></td><td><strong>{formatCurrency(L.total)}</strong></td></tr>
             </tbody>
