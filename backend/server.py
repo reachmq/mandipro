@@ -976,7 +976,9 @@ async def get_balance_sheet(as_on_date: Optional[str] = None):
         received = sum(c["amount"] for c in cash_entries if c.get("type") == "ADVANCE" and c.get("sub_type") == "RECEIVED" and c.get("party_name") == ap["name"])
         # JV: When ADVANCE party is on DEBIT side, they paid someone (reduces their receivable)
         jv_paid = sum(a["amount"] for a in adjustments if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == ap["id"])
-        bal = ap.get("opening_balance", 0) + given - received - jv_paid
+        # JV: When ADVANCE party is on CREDIT side, someone paid into their account (increases their receivable)
+        jv_received = sum(a["amount"] for a in adjustments if a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == ap["id"])
+        bal = ap.get("opening_balance", 0) + given - received - jv_paid + jv_received
         if bal != 0:
             adv_receivables.append({"name": ap["name"], "amount": bal})
     
