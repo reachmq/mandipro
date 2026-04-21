@@ -39,7 +39,9 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Search...",
     <div className="ss-wrap" ref={wrapRef} data-testid={testId}>
       <div
         className={`ss-trigger ${disabled ? "ss-disabled" : ""} ${open ? "ss-open" : ""}`}
+        tabIndex={disabled ? -1 : 0}
         onClick={() => { if (!disabled) { setOpen(!open); setTimeout(() => inputRef.current?.focus(), 50); } }}
+        onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) { e.preventDefault(); setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); } }}
       >
         <span className={selected ? "ss-value" : "ss-placeholder"}>
           {selected ? selected.label : placeholder}

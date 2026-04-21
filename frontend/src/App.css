@@ -426,14 +426,14 @@ body {
   background: #991B1B;
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 5px 10px;
   font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .btn-delete:hover {
-  background: #e53e3e;
+  background: #7f1d1d;
 }
 
 /* Tables */
@@ -450,21 +450,21 @@ table {
 }
 
 th, td {
-  padding: 12px 15px;
+  padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid #e2e8f0;
 }
 
 th {
-  background: #f7fafc;
+  background: #F9F8F6;
   font-weight: 600;
-  color: #4a5568;
-  font-size: 13px;
+  color: #475569;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
 td {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 tr:hover {
@@ -1498,15 +1498,25 @@ tr:hover {
   background: #C5A55A;
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 5px 14px;
   font-size: 12px;
   cursor: pointer;
-  margin-right: 8px;
+  margin-right: 6px;
+  white-space: nowrap;
 }
 
 .btn-edit:hover {
   background: #b08f40;
+}
+
+td:last-child {
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.btn-edit, .btn-delete {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* Modal Overlay */
