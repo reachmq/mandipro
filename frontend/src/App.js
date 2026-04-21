@@ -1795,8 +1795,8 @@ const BepariLedger = () => {
           </tr></thead>
           <tbody>
             {sortedLedger.map((b) => (
-              <tr key={b.id}>
-                <td><strong className="party-link" onClick={() => navigate(`/party-statement?type=bepaari&id=${b.id}`)}>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
+              <tr key={b.id} className="clickable-row" onClick={() => navigate(`/party-statement?type=bepaari&id=${b.id}`)}>
+                <td><strong>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
                 <td>{b.quantity}</td><td>{formatCurrency(b.commission)}</td><td>{formatCurrency(b.kk)}</td><td>{formatCurrency(b.jb)}</td>
                 <td>{formatCurrency(b.total_deductions)}</td><td>{formatCurrency(b.payments)}</td>
                 <td className="adjustment-col">{b.adjustments > 0 ? formatCurrency(b.adjustments) : "-"}</td>
@@ -1979,8 +1979,8 @@ const DukandarLedger = () => {
           </tr></thead>
           <tbody>
             {sortedLedger.map((d) => (
-              <tr key={d.id} className={getAgingClass(d)}>
-                <td><strong className="party-link" onClick={() => navigate(`/party-statement?type=dukandar&id=${d.id}`)}>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
+              <tr key={d.id} className={`clickable-row ${getAgingClass(d)}`} onClick={() => navigate(`/party-statement?type=dukandar&id=${d.id}`)}>
+                <td><strong>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
                 <td className="bf-disc-col">{d.bf_disc > 0 ? formatCurrency(d.bf_disc) : "-"}</td>
                 <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>

@@ -1524,6 +1524,12 @@ td:last-child {
 .party-link:hover {
   color: #C5A55A;
 }
+.clickable-row {
+  cursor: pointer;
+}
+.clickable-row:hover {
+  background: rgba(197,165,90,0.08) !important;
+}
 
 .btn-edit, .btn-delete {
   display: inline-block;
