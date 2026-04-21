@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
-import DashboardPreview from "./DashboardPreview";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -11,8 +10,18 @@ const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 };
 
+const fmtShort = (amount) => {
+  if (!amount) return "₹0";
+  const abs = Math.abs(amount);
+  if (abs >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  if (abs >= 100000) return `₹${(amount / 100000).toFixed(2)}L`;
+  return formatCurrency(amount);
+};
+
 // ============== SIDEBAR ==============
 const Sidebar = () => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const navItems = [
     { path: "/", label: "Dashboard", icon: "📊" },
     { path: "/daily-sales", label: "Daily Sales", icon: "🐐" },
@@ -28,52 +37,214 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="sidebar" data-testid="sidebar">
-      <div className="sidebar-header">
-        <h1>Mandi</h1>
-        <span>Accounting</span>
-      </div>
-      <nav className="sidebar-nav">
-        {navItems.map((item) => (
-          <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-    </aside>
+    <>
+      <button className="mobile-hamburger" data-testid="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>
+        {mobileOpen ? "✕" : "☰"}
+      </button>
+      {mobileOpen && <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />}
+      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} data-testid="sidebar">
+        <div className="sidebar-header">
+          <h1>Mandi</h1>
+          <span>Accounting</span>
+        </div>
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+    </>
   );
 };
 
-// ============== DASHBOARD ==============
+// ============== DASHBOARD (Dalal Premium Traditional) ==============
 const Dashboard = () => {
   const [data, setData] = useState(null);
+  const [todaySales, setTodaySales] = useState([]);
+  const [mtd, setMtd] = useState(null);
+  const [topRecv, setTopRecv] = useState([]);
+  const [topPay, setTopPay] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get(`${API}/balance-sheet`).then(res => setData(res.data)).finally(() => setLoading(false));
+    const today = new Date().toISOString().split('T')[0];
+    const monthStart = today.substring(0, 7) + '-01';
+    Promise.all([
+      axios.get(`${API}/balance-sheet`),
+      axios.get(`${API}/daily-sales?from_date=${today}&to_date=${today}`),
+      axios.get(`${API}/daily-sales?from_date=${monthStart}&to_date=${today}`),
+      axios.get(`${API}/dukandar-ledger`),
+      axios.get(`${API}/bepaari-ledger`),
+    ]).then(([bsRes, todayRes, mtdRes, dukRes, bepRes]) => {
+      setData(bsRes.data);
+      const ts = todayRes.data;
+      setTodaySales(ts.sort((a, b) => b.gross_amount - a.gross_amount).slice(0, 5));
+      const ms = mtdRes.data;
+      const uniqueDates = [...new Set(ms.map(s => s.date))];
+      setMtd({
+        qty: ms.reduce((s, x) => s + x.quantity, 0),
+        gross: ms.reduce((s, x) => s + x.gross_amount, 0),
+        days: uniqueDates.length,
+        todayQty: ts.reduce((s, x) => s + x.quantity, 0),
+        todayGross: ts.reduce((s, x) => s + x.gross_amount, 0),
+        todayEntries: ts.length,
+        todayBeparis: [...new Set(ts.map(s => s.bepaari_id))].length,
+      });
+      setTopRecv(dukRes.data.filter(d => d.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 5));
+      setTopPay(bepRes.data.filter(b => b.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 5));
+      setLoading(false);
+    });
   }, []);
 
   if (loading) return <div className="loading">Loading...</div>;
 
   const comm = data?.liabilities?.commission || {};
+  const patti = data?.assets?.patti || 0;
+  const bepPay = data?.liabilities?.bepaari_payables || 0;
+  const todayAvg = mtd?.todayQty > 0 ? Math.round(mtd.todayGross / mtd.todayQty) : 0;
 
   return (
-    <div className="page" data-testid="dashboard-page">
-      <h2>Dashboard</h2>
-      <div className="dashboard-grid">
-        <div className="card green"><h3>Cash Balance</h3><p className="big-number">{formatCurrency(data?.assets?.cash_balance)}</p></div>
-        <div className="card blue"><h3>Bank Balance</h3><p className="big-number">{formatCurrency(data?.assets?.bank_balance)}</p></div>
-        <div className="card orange"><h3>Patti (Receivable)</h3><p className="big-number">{formatCurrency(data?.assets?.patti)}</p></div>
-        <div className="card red"><h3>Bepaari Payable</h3><p className="big-number">{formatCurrency(data?.liabilities?.bepaari_payables)}</p></div>
-        <div className={`card ${data?.difference === 0 ? "green" : "red"}`}><h3>Balance Sheet</h3><p className="big-number">{data?.difference === 0 ? "TALLIED" : `Diff: ${formatCurrency(data?.difference)}`}</p></div>
-        <div className="card purple commission-card" data-testid="commission-card">
-          <h3>Net Commission</h3>
-          <p className="big-number" data-testid="commission-total">{formatCurrency(comm.total)}</p>
-          <div className="commission-breakdown">
-            <span data-testid="commission-gross">Gross: {formatCurrency(comm.earned)}</span>
-            {comm.rate_diff > 0 && <span data-testid="commission-rate-diff">Rate Diff: +{formatCurrency(comm.rate_diff)}</span>}
-            <span data-testid="commission-discounts">Disc: -{formatCurrency(comm.discounts)}</span>
+    <div className="dalal-dashboard" data-testid="dashboard-page">
+      {/* Header */}
+      <div className="dalal-header">
+        <div>
+          <h1 className="dalal-h1">Dashboard</h1>
+          <p className="dalal-date">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        </div>
+        <div className={`dalal-badge ${data?.difference === 0 ? 'tallied' : 'pending'}`} data-testid="bs-status-badge">
+          {data?.difference === 0 ? 'BALANCE SHEET TALLIED' : `DIFF: ${formatCurrency(data?.difference)}`}
+        </div>
+      </div>
+
+      {/* MTD Bar */}
+      <div className="dalal-mtd-bar">
+        <div className="dalal-mtd-label">
+          <span className="dalal-mtd-title">MTD SUMMARY</span>
+          <span className="dalal-mtd-month">{new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+        </div>
+        <div className="dalal-mtd-stats">
+          <div className="dalal-mtd-stat">
+            <span className="dalal-mtd-value">{mtd?.qty?.toLocaleString('en-IN')}</span>
+            <span className="dalal-mtd-stat-label">Total Goats</span>
+          </div>
+          <div className="dalal-mtd-divider" />
+          <div className="dalal-mtd-stat">
+            <span className="dalal-mtd-value">{fmtShort(mtd?.gross)}</span>
+            <span className="dalal-mtd-stat-label">Gross Sales</span>
+          </div>
+          <div className="dalal-mtd-divider" />
+          <div className="dalal-mtd-stat">
+            <span className="dalal-mtd-value">{mtd?.days}</span>
+            <span className="dalal-mtd-stat-label">Market Days</span>
+          </div>
+          <div className="dalal-mtd-divider" />
+          <div className="dalal-mtd-stat">
+            <span className="dalal-mtd-value">{fmtShort(comm.total)}</span>
+            <span className="dalal-mtd-stat-label">Net Commission</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Metric Cards */}
+      <div className="dalal-metrics" data-testid="metric-cards">
+        <div className="dalal-metric-card" data-testid="metric-today-goats">
+          <span className="dalal-metric-label">TODAY'S GOATS</span>
+          <span className="dalal-metric-value">{mtd?.todayQty || 0}</span>
+          <span className="dalal-metric-sub">{mtd?.todayEntries || 0} txns | {mtd?.todayBeparis || 0} bepaaris</span>
+        </div>
+        <div className="dalal-metric-card" data-testid="metric-today-sales">
+          <span className="dalal-metric-label">TODAY'S SALES</span>
+          <span className="dalal-metric-value">{fmtShort(mtd?.todayGross)}</span>
+          <span className="dalal-metric-sub">{todayAvg > 0 ? `Avg ${formatCurrency(todayAvg)}/head` : 'No sales today'}</span>
+        </div>
+        <div className="dalal-metric-card" data-testid="commission-card">
+          <span className="dalal-metric-label">NET COMMISSION</span>
+          <span className="dalal-metric-value">{fmtShort(comm.total)}</span>
+          <span className="dalal-metric-sub">Gross {fmtShort(comm.earned)}{comm.rate_diff > 0 ? ` +${fmtShort(comm.rate_diff)}` : ''} - Disc {fmtShort(comm.discounts)}</span>
+        </div>
+        <div className="dalal-metric-card" data-testid="metric-cash">
+          <span className="dalal-metric-label">CASH BALANCE</span>
+          <span className="dalal-metric-value cash">{formatCurrency(data?.assets?.cash_balance)}</span>
+          <span className="dalal-metric-sub">&nbsp;</span>
+        </div>
+        <div className="dalal-metric-card" data-testid="metric-bank">
+          <span className="dalal-metric-label">BANK BALANCE</span>
+          <span className="dalal-metric-value">{formatCurrency(data?.assets?.bank_balance)}</span>
+          <span className="dalal-metric-sub">&nbsp;</span>
+        </div>
+      </div>
+
+      {/* Three Columns */}
+      <div className="dalal-three-col">
+        {/* Today's Transactions */}
+        <div className="dalal-table-card">
+          <div className="dalal-table-header">
+            <h3>Today's Transactions</h3>
+            <span className="dalal-link" onClick={() => navigate('/daily-sales')} data-testid="view-all-sales">View All</span>
+          </div>
+          <table className="dalal-table">
+            <thead><tr><th>BEPAARI &rarr; DUKANDAR</th><th style={{textAlign:'center'}}>QTY</th><th style={{textAlign:'right'}}>AMOUNT</th></tr></thead>
+            <tbody>
+              {todaySales.length === 0 ? (
+                <tr><td colSpan="3" className="dalal-empty">No sales today</td></tr>
+              ) : todaySales.map((s, i) => (
+                <tr key={i} className={i % 2 === 1 ? 'alt-row' : ''}>
+                  <td><strong>{s.bepaari_name}</strong><span className="dalal-arrow"> &rarr; </span><span className="dalal-muted">{s.dukandar_name}</span></td>
+                  <td style={{textAlign:'center'}}>{s.quantity} pcs</td>
+                  <td style={{textAlign:'right'}} className="dalal-amount">{formatCurrency(s.gross_amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Top Receivables */}
+        <div className="dalal-table-card">
+          <div className="dalal-table-header">
+            <h3>Top Receivables (Patti)</h3>
+            <span className="dalal-link" onClick={() => navigate('/dukandar-ledger')} data-testid="view-dukandar-ledger">Ledger</span>
+          </div>
+          <table className="dalal-table">
+            <thead><tr><th>DUKANDAR</th><th style={{textAlign:'right'}}>BALANCE</th></tr></thead>
+            <tbody>
+              {topRecv.map((d, i) => (
+                <tr key={i} className={i % 2 === 1 ? 'alt-row' : ''}>
+                  <td><strong>{d.name}</strong></td>
+                  <td style={{textAlign:'right'}} className="dalal-amount recv">{formatCurrency(d.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="dalal-total-bar">
+            <span>Total Patti</span>
+            <span className="dalal-total-value">{fmtShort(patti)}</span>
+          </div>
+        </div>
+
+        {/* Top Payables */}
+        <div className="dalal-table-card">
+          <div className="dalal-table-header">
+            <h3>Top Payables (Bepaari)</h3>
+            <span className="dalal-link" onClick={() => navigate('/bepaari-ledger')} data-testid="view-bepaari-ledger">Ledger</span>
+          </div>
+          <table className="dalal-table">
+            <thead><tr><th>BEPAARI</th><th style={{textAlign:'right'}}>BALANCE</th></tr></thead>
+            <tbody>
+              {topPay.map((b, i) => (
+                <tr key={i} className={i % 2 === 1 ? 'alt-row' : ''}>
+                  <td><strong>{b.name}</strong></td>
+                  <td style={{textAlign:'right'}} className="dalal-amount pay">{formatCurrency(b.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="dalal-total-bar">
+            <span>Total Payable</span>
+            <span className="dalal-total-value">{fmtShort(bepPay)}</span>
           </div>
         </div>
       </div>
@@ -1936,7 +2107,6 @@ function App() {
             <Route path="/bepaari-aakda" element={<BepariAakda />} />
             <Route path="/party-statement" element={<PartyStatement />} />
             <Route path="/masters" element={<Masters />} />
-            <Route path="/dashboard-preview" element={<DashboardPreview />} />
           </Routes>
         </main>
       </div>

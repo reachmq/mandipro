@@ -120,6 +120,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 | Feb 2026 | **Differential Pricing**: Optional `dukandar_rate` field in Daily Sales. When Dukandar rate differs from Bepaari rate, each ledger uses its own rate. Rate difference flows to Commission. Balance Sheet stays tallied. |
 | Feb 2026 | **BUG FIX: Balance Transfer double-counting in Party Statement**. Transfers modify opening_balance directly, so showing them as debit/credit entries was double-counting. Fixed: transfers now shown as informational rows (grayed out, italic) without affecting running balance. Opening balance calc for date filters also fixed. |
 | Feb 2026 | **Expense Write-offs via JV**: Added MANDI_EXPENSE and BF_DISCOUNT as expense head options in Adjustments. Dukandar round-offs/bad debts reduce receivable + increase expense. Bepaari extra payments increase payable + increase expense. Balance Sheet stays tallied. |
+| Feb 2026 | **Dalal Premium Traditional Dashboard**: New dashboard with MTD Summary bar, 5 metric cards, Today's Transactions, Top Receivables (Patti), Top Payables (Bepaari). Clickable links to ledgers. Mobile-responsive with hamburger menu. Sidebar redesigned with Deep Sapphire Blue + Antique Gold theme. |
 
 ---
 

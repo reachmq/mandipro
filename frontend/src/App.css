@@ -5,9 +5,9 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f5f7fa;
-  color: #333;
+  font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #F9F8F6;
+  color: #0F172A;
 }
 
 .app-container {
@@ -18,30 +18,33 @@ body {
 /* Sidebar */
 .sidebar {
   width: 220px;
-  background: linear-gradient(180deg, #1a365d 0%, #2d3748 100%);
+  background: #1B2A4A;
   color: white;
   position: fixed;
   height: 100vh;
   padding: 20px 0;
   overflow-y: auto;
+  z-index: 100;
+  transition: transform 0.3s ease;
 }
 
 .sidebar-header {
   text-align: center;
   padding: 15px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid rgba(197,165,90,0.2);
   margin-bottom: 10px;
 }
 
 .sidebar-header h1 {
   font-size: 24px;
   font-weight: 700;
-  color: #48bb78;
+  color: #C5A55A;
+  font-family: 'Cormorant Garamond', Georgia, serif;
 }
 
 .sidebar-header span {
   font-size: 12px;
-  color: #a0aec0;
+  color: rgba(255,255,255,0.5);
 }
 
 .sidebar-nav {
@@ -58,18 +61,22 @@ body {
   padding: 10px 12px;
   color: #e2e8f0;
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 0;
   transition: all 0.2s;
   font-size: 14px;
+  border-left: 3px solid transparent;
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.1);
+  background: rgba(197,165,90,0.1);
+  border-left-color: rgba(197,165,90,0.3);
 }
 
 .nav-item.active {
-  background: #48bb78;
-  color: white;
+  background: rgba(197,165,90,0.15);
+  color: #C5A55A;
+  border-left-color: #C5A55A;
+  font-weight: 600;
 }
 
 .nav-icon {
@@ -95,69 +102,262 @@ body {
 
 .page h2 {
   font-size: 24px;
-  color: #1a365d;
+  color: #1B2A4A;
   margin-bottom: 25px;
   padding-bottom: 10px;
-  border-bottom: 2px solid #48bb78;
+  border-bottom: 2px solid #C5A55A;
 }
 
-/* Dashboard */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
+/* Mobile Hamburger */
+.mobile-hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  background: #1B2A4A;
+  color: #C5A55A;
+  border: none;
+  font-size: 22px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  line-height: 1;
+}
+.mobile-overlay {
+  display: none;
 }
 
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 25px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+/* ======= DALAL PREMIUM DASHBOARD ======= */
+.dalal-dashboard {
+  padding: 0;
+  max-width: 100%;
+  font-family: 'IBM Plex Sans', sans-serif;
 }
-
-.card h3 {
-  font-size: 14px;
-  color: #718096;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-}
-
-.card .big-number {
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.card.green { border-left: 4px solid #48bb78; }
-.card.green .big-number { color: #48bb78; }
-
-.card.blue { border-left: 4px solid #4299e1; }
-.card.blue .big-number { color: #4299e1; }
-
-.card.orange { border-left: 4px solid #ed8936; }
-.card.orange .big-number { color: #ed8936; }
-
-.card.red { border-left: 4px solid #f56565; }
-.card.red .big-number { color: #f56565; }
-
-.card.purple { border-left: 4px solid #9f7aea; }
-.card.purple .big-number { color: #9f7aea; }
-
-.commission-card {
-  position: relative;
-}
-
-.commission-breakdown {
+.dalal-header {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: #718096;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #e2e8f0;
+  align-items: flex-start;
+  margin-bottom: 20px;
 }
-
-.commission-breakdown span {
-  font-weight: 500;
+.dalal-h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+  color: #1B2A4A;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+.dalal-date {
+  font-size: 13px;
+  color: #475569;
+  margin-top: 4px;
+}
+.dalal-badge {
+  padding: 6px 16px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dalal-badge.tallied {
+  background: rgba(22,101,52,0.08);
+  color: #166534;
+  border: 1px solid rgba(22,101,52,0.2);
+}
+.dalal-badge.pending {
+  background: rgba(153,27,27,0.08);
+  color: #991B1B;
+  border: 1px solid rgba(153,27,27,0.2);
+}
+.dalal-mtd-bar {
+  background: #1B2A4A;
+  padding: 16px 24px;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #C5A55A;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dalal-mtd-label {
+  display: flex;
+  flex-direction: column;
+}
+.dalal-mtd-title {
+  color: #C5A55A;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.dalal-mtd-month {
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.dalal-mtd-stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.dalal-mtd-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px;
+}
+.dalal-mtd-value {
+  color: #C5A55A;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+.dalal-mtd-stat-label {
+  color: rgba(255,255,255,0.6);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+.dalal-mtd-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(255,255,255,0.15);
+}
+.dalal-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.dalal-metric-card {
+  background: #FFFFFF;
+  padding: 18px 16px 14px;
+  border: 1px solid #E2E0D8;
+  border-top: 3px solid #C5A55A;
+  display: flex;
+  flex-direction: column;
+}
+.dalal-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: #475569;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.dalal-metric-value {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1B2A4A;
+  line-height: 1.1;
+}
+.dalal-metric-value.cash {
+  color: #166534;
+}
+.dalal-metric-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 8px;
+}
+.dalal-three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+.dalal-table-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E0D8;
+  overflow: hidden;
+}
+.dalal-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px 10px;
+  border-bottom: 2px solid #1B2A4A;
+}
+.dalal-table-header h3 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1B2A4A;
+  margin: 0;
+}
+.dalal-link {
+  font-size: 11px;
+  color: #C5A55A;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dalal-link:hover {
+  text-decoration: underline;
+}
+.dalal-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dalal-table th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #475569;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid #E2E0D8;
+}
+.dalal-table td {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #0F172A;
+  border-bottom: 1px solid #F1F0EC;
+}
+.dalal-table .alt-row {
+  background: #F9F8F6;
+}
+.dalal-arrow {
+  color: #C5A55A;
+  font-weight: 700;
+}
+.dalal-muted {
+  color: #475569;
+}
+.dalal-amount {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+}
+.dalal-amount.recv {
+  color: #991B1B;
+}
+.dalal-amount.pay {
+  color: #166534;
+}
+.dalal-empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 24px 16px !important;
+}
+.dalal-total-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 2px solid #C5A55A;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dalal-total-value {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1B2A4A;
 }
 
 /* Forms */
@@ -539,38 +739,80 @@ tr:hover {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .mobile-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+  }
   .sidebar {
-    width: 60px;
+    transform: translateX(-100%);
+    width: 240px;
   }
-  
-  .nav-label {
-    display: none;
+  .sidebar.sidebar-open {
+    transform: translateX(0);
   }
-  
-  .sidebar-header h1 {
-    font-size: 18px;
-  }
-  
-  .sidebar-header span {
-    display: none;
-  }
-  
   .main-content {
-    margin-left: 60px;
-    padding: 15px;
+    margin-left: 0;
+    padding: 60px 12px 16px;
   }
-  
+  /* Dashboard mobile */
+  .dalal-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dalal-h1 { font-size: 22px; }
+  .dalal-mtd-bar {
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .dalal-mtd-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+  .dalal-mtd-divider { display: none; }
+  .dalal-mtd-stat {
+    padding: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+  }
+  .dalal-mtd-value { font-size: 18px; }
+  .dalal-metrics {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .dalal-metric-value { font-size: 22px; }
+  .dalal-three-col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  /* Other pages mobile */
   .bs-container {
     grid-template-columns: 1fr;
   }
-  
   .entry-form {
     flex-direction: column;
   }
-  
   .entry-form input,
   .entry-form select {
     width: 100%;
+  }
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+  }
+  .table-container {
+    overflow-x: auto;
   }
 }
 
