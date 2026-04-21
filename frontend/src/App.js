@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
+import DashboardPreview from "./DashboardPreview";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -1935,6 +1936,7 @@ function App() {
             <Route path="/bepaari-aakda" element={<BepariAakda />} />
             <Route path="/party-statement" element={<PartyStatement />} />
             <Route path="/masters" element={<Masters />} />
+            <Route path="/dashboard-preview" element={<DashboardPreview />} />
           </Routes>
         </main>
       </div>
