@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
@@ -1268,14 +1268,16 @@ const BalanceTransfer = () => {
 
 // ============== PARTY STATEMENT (NEW!) ==============
 const PartyStatement = () => {
+  const [searchParams] = useSearchParams();
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
-  const [partyType, setPartyType] = useState("bepaari");
-  const [partyId, setPartyId] = useState("");
+  const [partyType, setPartyType] = useState(searchParams.get("type") || "bepaari");
+  const [partyId, setPartyId] = useState(searchParams.get("id") || "");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [autoFetched, setAutoFetched] = useState(false);
 
   useEffect(() => {
     Promise.all([axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`)]).then(([b, d]) => {
@@ -1283,6 +1285,14 @@ const PartyStatement = () => {
       setDukandars(d.data);
     });
   }, []);
+
+  // Auto-fetch when coming from ledger with URL params
+  useEffect(() => {
+    if (partyId && !autoFetched && (bepaaris.length > 0 || dukandars.length > 0)) {
+      setAutoFetched(true);
+      fetchStatement();
+    }
+  }, [partyId, bepaaris, dukandars]);
 
   const fetchStatement = async () => {
     if (!partyId) { alert("Please select a party"); return; }
@@ -1684,6 +1694,7 @@ const BepariLedger = () => {
   const [asOnDate, setAsOnDate] = useState("");
   const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchData = async () => {
     const url = asOnDate ? `${API}/bepaari-ledger?as_on_date=${asOnDate}` : `${API}/bepaari-ledger`;
@@ -1785,7 +1796,7 @@ const BepariLedger = () => {
           <tbody>
             {sortedLedger.map((b) => (
               <tr key={b.id}>
-                <td><strong>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
+                <td><strong className="party-link" onClick={() => navigate(`/party-statement?type=bepaari&id=${b.id}`)}>{b.name}</strong></td><td>{b.phone || "-"}</td><td>{formatCurrency(b.opening)}</td><td>{formatCurrency(b.gross_sales)}</td>
                 <td>{b.quantity}</td><td>{formatCurrency(b.commission)}</td><td>{formatCurrency(b.kk)}</td><td>{formatCurrency(b.jb)}</td>
                 <td>{formatCurrency(b.total_deductions)}</td><td>{formatCurrency(b.payments)}</td>
                 <td className="adjustment-col">{b.adjustments > 0 ? formatCurrency(b.adjustments) : "-"}</td>
@@ -1811,6 +1822,7 @@ const DukandarLedger = () => {
   const [asOnDate, setAsOnDate] = useState("");
   const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchData = async () => {
     const url = asOnDate ? `${API}/dukandar-ledger?as_on_date=${asOnDate}` : `${API}/dukandar-ledger`;
@@ -1968,7 +1980,7 @@ const DukandarLedger = () => {
           <tbody>
             {sortedLedger.map((d) => (
               <tr key={d.id} className={getAgingClass(d)}>
-                <td><strong>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
+                <td><strong className="party-link" onClick={() => navigate(`/party-statement?type=dukandar&id=${d.id}`)}>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
                 <td className="bf-disc-col">{d.bf_disc > 0 ? formatCurrency(d.bf_disc) : "-"}</td>
                 <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>
