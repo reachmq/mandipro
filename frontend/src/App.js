@@ -47,7 +47,7 @@ const Sidebar = () => {
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`} data-testid="sidebar">
         <div className="sidebar-header">
           <h1>Mandi</h1>
-          <span>Accounting</span>
+          <span>Accounting App</span>
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
@@ -1528,12 +1528,12 @@ const PartyStatement = () => {
         <title>Ledger - ${statement.party.name}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-          h1 { text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 18px; }
+          h1 { text-align: center; color: #1B2A4A; margin-bottom: 5px; font-size: 18px; }
           .subtitle { text-align: center; color: #666; margin-bottom: 5px; }
           .period { text-align: center; color: #333; margin-bottom: 15px; }
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 1px solid #ddd; padding: 6px 8px; }
-          th { background: #1a365d; color: white; text-align: center; }
+          th { background: #1B2A4A; color: white; text-align: center; }
           td { text-align: right; }
           td:first-child, td:nth-child(2) { text-align: left; }
           .total-row { background: #f0f0f0; font-weight: bold; }
@@ -1586,7 +1586,7 @@ const PartyStatement = () => {
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting System on ${printDate}</p>
+        <p class="print-footer">Generated from Mandi Accounting App on ${printDate}</p>
       </body>
       </html>
     `;
@@ -1751,7 +1751,7 @@ const BepariLedger = () => {
             </tr>
           </tbody>
         </table>
-        <p class="footer">Generated from Mandi Accounting System on ${printDate}</p>
+        <p class="footer">Generated from Mandi Accounting App on ${printDate}</p>
       </body></html>`;
     const w = window.open('', '', 'width=1000,height=700');
     w.document.write(printContent);
@@ -1830,15 +1830,15 @@ const DukandarLedger = () => {
         <title>Patti - Dukandar Outstanding - ${printDate}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { text-align: center; color: #1a365d; margin-bottom: 5px; }
+          h1 { text-align: center; color: #1B2A4A; margin-bottom: 5px; }
           .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
           table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: right; font-size: 12px; }
-          th { background: #1a365d; color: white; }
+          th, td { border: 1px solid #E2E0D8; padding: 8px; text-align: right; font-size: 12px; }
+          th { background: #1B2A4A; color: white; }
           td:first-child, th:first-child { text-align: left; }
-          .total-row { background: #f0f0f0; font-weight: bold; }
-          .positive { color: green; }
-          .negative { color: red; }
+          .total-row { background: #F9F8F6; font-weight: bold; }
+          .positive { color: #166534; }
+          .negative { color: #991B1B; }
           .print-footer { margin-top: 30px; text-align: center; font-size: 11px; color: #888; }
           @media print { 
             body { padding: 0; }
@@ -1890,7 +1890,7 @@ const DukandarLedger = () => {
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting System</p>
+        <p class="print-footer">Generated from Mandi Accounting App</p>
       </body>
       </html>
     `;

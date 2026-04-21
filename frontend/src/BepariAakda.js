@@ -36,22 +36,24 @@ const BepariAakda = () => {
         <head>
           <title>Bepaari Aakda - ${selectedAakda.bepaari_name}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            .aakda-slip { border: 2px solid #333; padding: 20px; max-width: 400px; margin: 0 auto; }
-            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px; }
-            .header h2 { margin: 0; font-size: 18px; }
-            .header p { margin: 5px 0; font-size: 12px; color: #666; }
-            .party-info { font-size: 16px; font-weight: bold; margin-bottom: 15px; }
+            @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+            body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 20px; }
+            .aakda-slip { border: 2px solid #1B2A4A; padding: 20px; max-width: 420px; margin: 0 auto; }
+            .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 10px; margin-bottom: 15px; }
+            .header h2 { margin: 0; font-size: 18px; font-family: 'Cormorant Garamond', Georgia, serif; color: #1B2A4A; }
+            .header .firm-name { font-size: 11px; color: #C5A55A; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 4px 0; }
+            .header p { margin: 3px 0; font-size: 11px; color: #475569; }
+            .party-info { font-size: 16px; font-weight: bold; color: #1B2A4A; margin-bottom: 15px; }
             .sales-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .sales-table th, .sales-table td { border: 1px solid #ddd; padding: 5px; text-align: left; }
-            .sales-table th { background: #f5f5f5; }
+            .sales-table th, .sales-table td { border: 1px solid #E2E0D8; padding: 5px; text-align: left; }
+            .sales-table th { background: #1B2A4A; color: white; font-size: 10px; text-transform: uppercase; }
             .summary-table { width: 100%; font-size: 13px; }
             .summary-table td { padding: 4px 0; }
             .summary-table td:last-child { text-align: right; font-weight: 500; }
-            .total-row { border-top: 2px solid #333; font-weight: bold; font-size: 14px; }
-            .closing-row { background: #f0f0f0; font-size: 16px; }
-            .deduction { color: #c00; }
-            .footer { text-align: center; margin-top: 15px; font-size: 10px; color: #666; border-top: 1px dashed #999; padding-top: 10px; }
+            .total-row { border-top: 3px solid #C5A55A; font-weight: bold; font-size: 14px; }
+            .closing-row { background: rgba(27,42,74,0.06); font-size: 16px; }
+            .deduction { color: #991B1B; }
+            .footer { text-align: center; margin-top: 15px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
           </style>
         </head>
         <body>
@@ -170,8 +172,8 @@ const BepariAakda = () => {
             <div ref={printRef} className="aakda-slip-preview">
               <div className="aakda-slip">
                 <div className="header">
+                  <p className="firm-name">Mushtaq Haji Nana & Sons</p>
                   <h2>BEPAARI AAKDA</h2>
-                  <p>Settlement Slip</p>
                   <p>Date: {selectedAakda.date}</p>
                 </div>
 
@@ -251,7 +253,7 @@ const BepariAakda = () => {
                 </table>
 
                 <div className="footer">
-                  <p>Thank you for your business!</p>
+                  <p>Mushtaq Haji Nana & Sons | Mandi Accounting App</p>
                 </div>
               </div>
             </div>
