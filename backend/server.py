@@ -39,6 +39,31 @@ def serialize_docs(docs):
     return [serialize_doc(d) for d in docs]
 
 
+async def log_activity(collection: str, record_id: str, action: str, old_values: dict, new_values: dict = None, summary: str = ""):
+    """Log edit/delete activity for audit trail"""
+    # Build changes list
+    changes = []
+    if action == "EDIT" and new_values:
+        for key, new_val in new_values.items():
+            old_val = old_values.get(key)
+            if old_val != new_val and key not in ("_id", "created_at"):
+                changes.append({"field": key, "old": str(old_val), "new": str(new_val)})
+    elif action == "DELETE":
+        changes = [{"field": k, "old": str(v), "new": ""} for k, v in old_values.items() if k not in ("_id", "created_at")]
+
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "collection": collection,
+        "record_id": record_id,
+        "action": action,
+        "summary": summary,
+        "changes": changes,
+        "user": "admin",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await db.activity_log.insert_one(log_entry)
+
+
 # ============== SETTINGS ==============
 @api_router.get("/settings")
 async def get_settings():
@@ -244,11 +269,17 @@ async def create_daily_sale(data: DailySaleCreate):
 
 @api_router.delete("/daily-sales/{sale_id}")
 async def delete_daily_sale(sale_id: str):
+    old = await db.daily_sales.find_one({"id": sale_id})
+    if old:
+        await log_activity("daily_sales", sale_id, "DELETE", serialize_doc(dict(old)),
+            summary=f"Deleted sale: {old.get('bepaari_name','')} → {old.get('dukandar_name','')}, {old.get('quantity',0)} pcs, {old.get('gross_amount',0)}")
     await db.daily_sales.delete_one({"id": sale_id})
     return {"status": "deleted"}
 
 @api_router.put("/daily-sales/{sale_id}")
 async def update_daily_sale(sale_id: str, data: dict):
+    old_doc = await db.daily_sales.find_one({"id": sale_id})
+    old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
     
     for field in ["date", "quantity", "rate", "discount"]:
@@ -257,7 +288,7 @@ async def update_daily_sale(sale_id: str, data: dict):
     
     # Recalculate amounts if qty/rate/discount/dukandar_rate changed
     if "quantity" in data or "rate" in data or "discount" in data or "dukandar_rate" in data:
-        sale = await db.daily_sales.find_one({"id": sale_id})
+        sale = old_doc
         qty = data.get("quantity", sale.get("quantity", 0))
         rate = data.get("rate", sale.get("rate", 0))
         discount = data.get("discount", sale.get("discount", 0))
@@ -287,6 +318,8 @@ async def update_daily_sale(sale_id: str, data: dict):
             update_fields["dukandar_name"] = dukandar.get("name")
     
     await db.daily_sales.update_one({"id": sale_id}, {"$set": update_fields})
+    await log_activity("daily_sales", sale_id, "EDIT", old_snap, update_fields,
+        summary=f"Edited sale: {old_snap.get('bepaari_name','')} → {old_snap.get('dukandar_name','')}")
     return {"status": "updated"}
 
 
@@ -348,11 +381,17 @@ async def create_cash_book_entry(data: CashBookEntryCreate):
 
 @api_router.delete("/cash-book/{entry_id}")
 async def delete_cash_book_entry(entry_id: str):
+    old = await db.cash_book.find_one({"id": entry_id})
+    if old:
+        await log_activity("cash_book", entry_id, "DELETE", serialize_doc(dict(old)),
+            summary=f"Deleted: {old.get('type','')} {old.get('sub_type','')} {old.get('party_name','')} {old.get('amount',0)}")
     await db.cash_book.delete_one({"id": entry_id})
     return {"status": "deleted"}
 
 @api_router.put("/cash-book/{entry_id}")
 async def update_cash_book_entry(entry_id: str, data: dict):
+    old_doc = await db.cash_book.find_one({"id": entry_id})
+    old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
     for field in ["date", "type", "sub_type", "party_id", "amount", "bf_disc", "mode", "particulars"]:
         if field in data:
@@ -367,6 +406,8 @@ async def update_cash_book_entry(entry_id: str, data: dict):
                 break
     
     await db.cash_book.update_one({"id": entry_id}, {"$set": update_fields})
+    await log_activity("cash_book", entry_id, "EDIT", old_snap, update_fields,
+        summary=f"Edited: {old_snap.get('type','')} {old_snap.get('sub_type','')} {old_snap.get('party_name','')}")
     return {"status": "updated"}
 
 
@@ -1060,12 +1101,18 @@ async def create_adjustment(data: AdjustmentEntryCreate):
 @api_router.delete("/adjustments/{adjustment_id}")
 async def delete_adjustment(adjustment_id: str):
     """Delete an adjustment entry"""
+    old = await db.adjustments.find_one({"id": adjustment_id})
+    if old:
+        await log_activity("adjustments", adjustment_id, "DELETE", serialize_doc(dict(old)),
+            summary=f"Deleted JV: {old.get('debit_party_name','')} → {old.get('credit_party_name','')} {old.get('amount',0)}")
     await db.adjustments.delete_one({"id": adjustment_id})
     return {"status": "deleted"}
 
 @api_router.put("/adjustments/{adjustment_id}")
 async def update_adjustment(adjustment_id: str, data: dict):
     """Update an adjustment entry"""
+    old_doc = await db.adjustments.find_one({"id": adjustment_id})
+    old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
     for field in ["date", "amount", "narration"]:
         if field in data:
@@ -1091,6 +1138,8 @@ async def update_adjustment(adjustment_id: str, data: dict):
                 break
     
     await db.adjustments.update_one({"id": adjustment_id}, {"$set": update_fields})
+    await log_activity("adjustments", adjustment_id, "EDIT", old_snap, update_fields,
+        summary=f"Edited JV: {old_snap.get('debit_party_name','')} → {old_snap.get('credit_party_name','')}")
     return {"status": "updated"}
 
 
@@ -1622,6 +1671,19 @@ async def export_all_data():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.document",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# ============== ACTIVITY LOG ==============
+@api_router.get("/activity-log")
+async def get_activity_log(collection: Optional[str] = None, action: Optional[str] = None, limit: int = 200):
+    """Get audit trail of edits and deletes"""
+    query = {}
+    if collection:
+        query["collection"] = collection
+    if action:
+        query["action"] = action
+    logs = await db.activity_log.find(query).sort("timestamp", -1).limit(limit).to_list(limit)
+    return serialize_docs(logs)
 
 
 # ============== REGISTER ROUTER & MIDDLEWARE ==============

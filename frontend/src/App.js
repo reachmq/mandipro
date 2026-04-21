@@ -35,6 +35,7 @@ const Sidebar = () => {
     { path: "/bepaari-aakda", label: "Bepaari Aakda", icon: "🧾" },
     { path: "/party-statement", label: "Party Statement", icon: "📄" },
     { path: "/masters", label: "Masters", icon: "⚙️" },
+    { path: "/activity-log", label: "Activity Log", icon: "📋" },
   ];
 
   return (
@@ -2237,6 +2238,88 @@ const Masters = () => {
   );
 };
 
+// ============== ACTIVITY LOG ==============
+const ActivityLog = () => {
+  const [logs, setLogs] = useState([]);
+  const [filter, setFilter] = useState({ collection: "", action: "" });
+  const [loading, setLoading] = useState(true);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    let url = `${API}/activity-log?limit=200`;
+    if (filter.collection) url += `&collection=${filter.collection}`;
+    if (filter.action) url += `&action=${filter.action}`;
+    const res = await axios.get(url);
+    setLogs(res.data);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchLogs(); }, [filter]);
+
+  const collectionLabels = { daily_sales: "Daily Sales", cash_book: "Cash & Bank", adjustments: "Adjustments" };
+  const actionColors = { EDIT: "#C5A55A", DELETE: "#991B1B" };
+
+  return (
+    <div className="page">
+      <h2>Activity Log</h2>
+      <p className="hint">Audit trail of all edits and deletes across the system</p>
+
+      <div className="filter-bar">
+        <select value={filter.collection} onChange={(e) => setFilter({ ...filter, collection: e.target.value })}>
+          <option value="">All Collections</option>
+          <option value="daily_sales">Daily Sales</option>
+          <option value="cash_book">Cash & Bank</option>
+          <option value="adjustments">Adjustments</option>
+        </select>
+        <select value={filter.action} onChange={(e) => setFilter({ ...filter, action: e.target.value })}>
+          <option value="">All Actions</option>
+          <option value="EDIT">Edits Only</option>
+          <option value="DELETE">Deletes Only</option>
+        </select>
+        <button className="btn-clear" onClick={() => setFilter({ collection: "", action: "" })}>Clear</button>
+        <span style={{ color: '#475569', fontSize: 13 }}>{logs.length} entries</span>
+      </div>
+
+      {loading ? <div className="loading">Loading...</div> : (
+        <div className="activity-log-list">
+          {logs.length === 0 && <div className="no-data">No activity logged yet. Edits and deletes will appear here.</div>}
+          {logs.map((log) => (
+            <div key={log.id} className="log-card" data-testid="log-entry">
+              <div className="log-header">
+                <div className="log-meta">
+                  <span className="log-action-badge" style={{ background: actionColors[log.action] || '#475569' }}>{log.action}</span>
+                  <span className="log-collection">{collectionLabels[log.collection] || log.collection}</span>
+                  <span className="log-user">by {log.user}</span>
+                </div>
+                <span className="log-time">{new Date(log.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              {log.summary && <div className="log-summary">{log.summary}</div>}
+              {log.changes && log.changes.length > 0 && (
+                <div className="log-changes">
+                  {log.changes.map((c, i) => (
+                    <div key={i} className="log-change-row">
+                      <span className="log-field">{c.field}</span>
+                      {log.action === "EDIT" ? (
+                        <>
+                          <span className="log-old">{c.old || '(empty)'}</span>
+                          <span className="log-arrow">&rarr;</span>
+                          <span className="log-new">{c.new || '(empty)'}</span>
+                        </>
+                      ) : (
+                        <span className="log-old">{c.old}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============== MAIN APP ==============
 function App() {
   return (
@@ -2256,6 +2339,7 @@ function App() {
             <Route path="/bepaari-aakda" element={<BepariAakda />} />
             <Route path="/party-statement" element={<PartyStatement />} />
             <Route path="/masters" element={<Masters />} />
+            <Route path="/activity-log" element={<ActivityLog />} />
           </Routes>
         </main>
       </div>
