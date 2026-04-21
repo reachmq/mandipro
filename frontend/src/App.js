@@ -70,6 +70,7 @@ const Dashboard = () => {
   const [mtd, setMtd] = useState(null);
   const [topRecv, setTopRecv] = useState([]);
   const [topPay, setTopPay] = useState([]);
+  const [overdue, setOverdue] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -109,7 +110,20 @@ const Dashboard = () => {
         todayEntries: ts.length,
         todayBeparis: [...new Set(ts.map(s => s.bepaari_id))].length,
       });
-      setTopRecv(dukRes.data.filter(d => d.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 5));
+      const dukLedger = dukRes.data;
+      setTopRecv(dukLedger.filter(d => d.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 5));
+      
+      // Overdue: balance > 0 and last_txn_date > 11 days ago
+      const now = new Date();
+      const overdueList = dukLedger
+        .filter(d => {
+          if (d.balance <= 0 || !d.last_txn_date) return false;
+          const days = Math.floor((now - new Date(d.last_txn_date)) / (1000 * 60 * 60 * 24));
+          return days > 11;
+        })
+        .map(d => ({ ...d, days_old: Math.floor((now - new Date(d.last_txn_date)) / (1000 * 60 * 60 * 24)) }))
+        .sort((a, b) => b.balance - a.balance);
+      setOverdue(overdueList);
       setTopPay(bepRes.data.filter(b => b.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 5));
       setLoading(false);
     });
@@ -263,6 +277,31 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Overdue Section */}
+      {overdue.length > 0 && (
+        <div className="dalal-overdue-section" data-testid="overdue-section">
+          <div className="dalal-table-card">
+            <div className="dalal-table-header">
+              <h3>Overdue Receivables ({overdue.length})</h3>
+              <span className="dalal-link" onClick={() => navigate('/dukandar-ledger')} data-testid="view-overdue-ledger">Ledger</span>
+            </div>
+            <table className="dalal-table">
+              <thead><tr><th>DUKANDAR</th><th style={{textAlign:'center'}}>DAYS</th><th style={{textAlign:'center'}}>LAST TXN</th><th style={{textAlign:'right'}}>BALANCE</th></tr></thead>
+              <tbody>
+                {overdue.map((d, i) => (
+                  <tr key={i} className={d.days_old > 15 ? 'aging-red' : 'aging-yellow'}>
+                    <td><strong>{d.name}</strong></td>
+                    <td style={{textAlign:'center'}}><span className="aging-badge">{d.days_old}d</span></td>
+                    <td style={{textAlign:'center', fontSize: 12, color: '#475569'}}>{d.last_txn_date}</td>
+                    <td style={{textAlign:'right'}} className="dalal-amount recv">{formatCurrency(d.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1862,6 +1901,28 @@ const DukandarLedger = () => {
 
   if (loading) return <div className="loading">Loading...</div>;
 
+  // Aging helper
+  const today = new Date();
+  const getDaysOld = (dateStr) => {
+    if (!dateStr) return 999;
+    const d = new Date(dateStr);
+    return Math.floor((today - d) / (1000 * 60 * 60 * 24));
+  };
+  const getAgingClass = (d) => {
+    if (d.balance <= 0) return '';
+    const days = getDaysOld(d.last_txn_date);
+    if (days > 15) return 'aging-red';
+    if (days > 7) return 'aging-yellow';
+    return '';
+  };
+  const getAgingLabel = (d) => {
+    if (d.balance <= 0) return '';
+    const days = getDaysOld(d.last_txn_date);
+    if (days > 15) return `${days}d overdue`;
+    if (days > 7) return `${days}d`;
+    return '';
+  };
+
   // Sorting
   const sortedLedger = [...ledger].filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).sort((a, b) => {
     if (sortBy === "name-asc") return a.name.localeCompare(b.name);
@@ -1889,7 +1950,12 @@ const DukandarLedger = () => {
           <option value="balance-desc">Balance (High-Low)</option>
           <option value="balance-asc">Balance (Low-High)</option>
         </select>
-        <button className="btn-print" onClick={handlePrint}>🖨️ Print / Save PDF</button>
+        <button className="btn-print" onClick={handlePrint}>Print / Save PDF</button>
+      </div>
+      <div className="aging-legend">
+        <span className="aging-legend-item"><span className="aging-dot normal"></span> 0-7 days</span>
+        <span className="aging-legend-item"><span className="aging-dot yellow"></span> 8-15 days (Caution)</span>
+        <span className="aging-legend-item"><span className="aging-dot red"></span> 15+ days (Overdue)</span>
       </div>
       <div className="table-container">
         <table>
@@ -1900,8 +1966,8 @@ const DukandarLedger = () => {
           </tr></thead>
           <tbody>
             {sortedLedger.map((d) => (
-              <tr key={d.id}>
-                <td><strong>{d.name}</strong></td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
+              <tr key={d.id} className={getAgingClass(d)}>
+                <td><strong>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
                 <td className="bf-disc-col">{d.bf_disc > 0 ? formatCurrency(d.bf_disc) : "-"}</td>
                 <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>

@@ -827,6 +827,10 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         # Only standalone BF_DISC reduces balance, NOT bf_disc from RECEIPT (already in Amount)
         balance = net_receivable - receipts - bf_disc_standalone - adj_debit - adj_writeoff
         
+        # Last transaction date (for aging/overdue tracking)
+        all_dates = [s["date"] for s in d_sales] + [c["date"] for c in d_cash]
+        last_txn_date = max(all_dates) if all_dates else None
+        
         ledger.append({
             "id": d["id"],
             "name": d["name"],
@@ -836,10 +840,11 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "discounts": discounts,
             "net_receivable": net_receivable,
             "receipts": receipts,
-            "bf_disc": bf_disc_total,  # Shows total for reference
+            "bf_disc": bf_disc_total,
             "adjustments": adj_debit,
             "writeoffs": adj_writeoff,
-            "balance": balance
+            "balance": balance,
+            "last_txn_date": last_txn_date
         })
     
     return ledger
