@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
+import SearchableSelect from "./SearchableSelect";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -327,14 +328,20 @@ const DailySales = () => {
       
       <form className="entry-form" onSubmit={handleSubmit}>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
-        <select value={form.bepaari_id} onChange={(e) => setForm({ ...form, bepaari_id: e.target.value })} required>
-          <option value="">Select Bepaari</option>
-          {bepaaris.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <select value={form.dukandar_id} onChange={(e) => setForm({ ...form, dukandar_id: e.target.value })} required>
-          <option value="">Select Dukandar</option>
-          {dukandars.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
+        <SearchableSelect
+          options={bepaaris.map(b => ({ value: b.id, label: b.name })).sort((a, b) => a.label.localeCompare(b.label))}
+          value={form.bepaari_id}
+          onChange={(val) => setForm({ ...form, bepaari_id: val })}
+          placeholder="Select Bepaari"
+          testId="bepaari-select"
+        />
+        <SearchableSelect
+          options={dukandars.map(d => ({ value: d.id, label: d.name })).sort((a, b) => a.label.localeCompare(b.label))}
+          value={form.dukandar_id}
+          onChange={(val) => setForm({ ...form, dukandar_id: val })}
+          placeholder="Select Dukandar"
+          testId="dukandar-select"
+        />
         <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required min="1" />
         <input type="number" placeholder="Rate" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} required />
         <input type="number" placeholder="Discount" value={form.discount === "0" ? "" : form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} onBlur={(e) => { if (!e.target.value) setForm({ ...form, discount: "0" }); }} />
@@ -346,14 +353,18 @@ const DailySales = () => {
       <div className="filter-bar">
         <label>From:</label><input type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} />
         <label>To:</label><input type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} />
-        <select value={filters.bepaari_id} onChange={(e) => setFilters({ ...filters, bepaari_id: e.target.value })}>
-          <option value="">All Bepaaris</option>
-          {bepaaris.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <select value={filters.dukandar_id} onChange={(e) => setFilters({ ...filters, dukandar_id: e.target.value })}>
-          <option value="">All Dukandars</option>
-          {dukandars.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
+        <SearchableSelect
+          options={[{ value: "", label: "All Bepaaris" }, ...bepaaris.map(b => ({ value: b.id, label: b.name })).sort((a, b) => a.label.localeCompare(b.label))]}
+          value={filters.bepaari_id}
+          onChange={(val) => setFilters({ ...filters, bepaari_id: val })}
+          placeholder="All Bepaaris"
+        />
+        <SearchableSelect
+          options={[{ value: "", label: "All Dukandars" }, ...dukandars.map(d => ({ value: d.id, label: d.name })).sort((a, b) => a.label.localeCompare(b.label))]}
+          value={filters.dukandar_id}
+          onChange={(val) => setFilters({ ...filters, dukandar_id: val })}
+          placeholder="All Dukandars"
+        />
         <button className="btn-clear" onClick={clearFilters}>Clear</button>
       </div>
 
@@ -583,10 +594,14 @@ const CashBook = () => {
           <option value="">Sub-Type</option>
           {(subTypes[form.type] || []).map((st) => <option key={st} value={st}>{st}</option>)}
         </select>
-        <select value={form.party_id} onChange={(e) => setForm({ ...form, party_id: e.target.value })}>
-          <option value="">Party</option>
-          {filteredParties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <SearchableSelect
+          options={filteredParties.map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}
+          value={form.party_id}
+          onChange={(val) => setForm({ ...form, party_id: val })}
+          placeholder="Party"
+          disabled={!form.type}
+          testId="cb-party-select"
+        />
         <input type="number" placeholder="Amount (Full Payable)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
         {showBfDisc && (
           <input 
@@ -885,10 +900,14 @@ const Adjustments = () => {
               </optgroup>
             </select>
             {!isExpenseHead(form.debit_type) && (
-              <select value={form.debit_party_id} onChange={(e) => setForm({ ...form, debit_party_id: e.target.value })} required={!isExpenseHead(form.debit_type)} disabled={!form.debit_type}>
-                <option value="">Select Party</option>
-                {getParties(form.debit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <SearchableSelect
+                options={getParties(form.debit_type).map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}
+                value={form.debit_party_id}
+                onChange={(val) => setForm({ ...form, debit_party_id: val })}
+                placeholder="Select Party"
+                disabled={!form.debit_type}
+                testId="jv-debit-party"
+              />
             )}
           </div>
 
@@ -910,10 +929,14 @@ const Adjustments = () => {
               </optgroup>
             </select>
             {!isExpenseHead(form.credit_type) && (
-              <select value={form.credit_party_id} onChange={(e) => setForm({ ...form, credit_party_id: e.target.value })} required={!isExpenseHead(form.credit_type)} disabled={!form.credit_type}>
-                <option value="">Select Party</option>
-                {getParties(form.credit_type).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <SearchableSelect
+                options={getParties(form.credit_type).map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}
+                value={form.credit_party_id}
+                onChange={(val) => setForm({ ...form, credit_party_id: val })}
+                placeholder="Select Party"
+                disabled={!form.credit_type}
+                testId="jv-credit-party"
+              />
             )}
           </div>
         </div>
@@ -1118,12 +1141,13 @@ const BalanceTransfer = () => {
             <option value="BEPAARI">Bepaari</option>
             <option value="ADVANCE">Advance Party</option>
           </select>
-          <select value={form.from_party_id} onChange={(e) => setForm({ ...form, from_party_id: e.target.value })}>
-            <option value="">Select Party</option>
-            {getParties(form.from_type).map(p => (
-              <option key={p.id} value={p.id}>{p.name} (₹{p.opening_balance?.toLocaleString() || 0})</option>
-            ))}
-          </select>
+          <SearchableSelect
+            options={getParties(form.from_type).map(p => ({ value: p.id, label: `${p.name} (₹${p.opening_balance?.toLocaleString() || 0})` })).sort((a, b) => a.label.localeCompare(b.label))}
+            value={form.from_party_id}
+            onChange={(val) => setForm({ ...form, from_party_id: val })}
+            placeholder="Select Party"
+            testId="bt-from-party"
+          />
           {form.from_party_id && (
             <div className="balance-info">Current Opening Balance: <strong>₹{getSourcePartyBalance().toLocaleString()}</strong></div>
           )}
@@ -1147,12 +1171,13 @@ const BalanceTransfer = () => {
           {form.create_new ? (
             <input type="text" placeholder="New Party Name" value={form.to_party_name} onChange={(e) => setForm({ ...form, to_party_name: e.target.value })} />
           ) : (
-            <select value={form.to_party_id} onChange={(e) => setForm({ ...form, to_party_id: e.target.value })}>
-              <option value="">Select Existing Party</option>
-              {getParties(form.to_type).map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={getParties(form.to_type).map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}
+              value={form.to_party_id}
+              onChange={(val) => setForm({ ...form, to_party_id: val })}
+              placeholder="Select Existing Party"
+              testId="bt-to-party"
+            />
           )}
         </div>
       </div>
@@ -1529,10 +1554,13 @@ const PartyStatement = () => {
           <option value="bepaari">Bepaari</option>
           <option value="dukandar">Dukandar</option>
         </select>
-        <select value={partyId} onChange={(e) => setPartyId(e.target.value)}>
-          <option value="">Select {partyType}</option>
-          {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <SearchableSelect
+          options={parties.map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}
+          value={partyId}
+          onChange={(val) => setPartyId(val)}
+          placeholder={`Select ${partyType}`}
+          testId="ps-party-select"
+        />
         <label>From:</label><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         <label>To:</label><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         <button className="btn-primary" onClick={fetchStatement}>Get Statement</button>
