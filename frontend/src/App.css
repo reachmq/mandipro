@@ -384,7 +384,18 @@ body {
 .entry-form input:focus,
 .entry-form select:focus {
   outline: none;
-  border-color: #48bb78;
+  border-color: #C5A55A;
+}
+
+.form-calc {
+  display: flex;
+  align-items: center;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1B2A4A;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .btn-primary {

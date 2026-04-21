@@ -337,7 +337,8 @@ const DailySales = () => {
         </select>
         <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required min="1" />
         <input type="number" placeholder="Rate" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} required />
-        <input type="number" placeholder="Discount" value={form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} />
+        <input type="number" placeholder="Discount" value={form.discount === "0" ? "" : form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} onBlur={(e) => { if (!e.target.value) setForm({ ...form, discount: "0" }); }} />
+        <span className="form-calc" data-testid="form-total">{form.quantity && form.rate ? `Total: ${formatCurrency(parseInt(form.quantity || 0) * parseFloat(form.rate || 0) - parseFloat(form.discount || 0))}` : ''}</span>
         <input type="number" placeholder="Duk. Rate (optional)" value={form.dukandar_rate} onChange={(e) => setForm({ ...form, dukandar_rate: e.target.value })} data-testid="dukandar-rate-input" title="Only fill if Dukandar rate differs from Bepaari rate" />
         <button type="submit" className="btn-primary">Add Sale</button>
       </form>
