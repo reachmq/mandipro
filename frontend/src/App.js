@@ -141,6 +141,7 @@ const Dashboard = () => {
       {/* Header */}
       <div className="dalal-header">
         <div>
+          <p className="dalal-firm-name">Haji Mushtaq Nana & Sons</p>
           <h1 className="dalal-h1">Dashboard</h1>
           <p className="dalal-date">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
         </div>
@@ -1586,7 +1587,7 @@ const PartyStatement = () => {
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting App on ${printDate}</p>
+        <p class="print-footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons on ${printDate}</p>
       </body>
       </html>
     `;
@@ -1751,7 +1752,7 @@ const BepariLedger = () => {
             </tr>
           </tbody>
         </table>
-        <p class="footer">Generated from Mandi Accounting App on ${printDate}</p>
+        <p class="footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons on ${printDate}</p>
       </body></html>`;
     const w = window.open('', '', 'width=1000,height=700');
     w.document.write(printContent);
@@ -1890,7 +1891,7 @@ const DukandarLedger = () => {
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting App</p>
+        <p class="print-footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons</p>
       </body>
       </html>
     `;

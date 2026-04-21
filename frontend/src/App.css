@@ -148,6 +148,14 @@ body {
   margin: 0;
   letter-spacing: -0.5px;
 }
+.dalal-firm-name {
+  font-size: 14px;
+  color: #C5A55A;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0 0 2px 0;
+}
 .dalal-date {
   font-size: 13px;
   color: #475569;
@@ -1387,10 +1395,10 @@ tr:hover {
 }
 
 .aakda-slip .header .firm-name {
-  font-size: 10px;
+  font-size: 14px;
   color: #C5A55A;
-  font-weight: 600;
-  letter-spacing: 1px;
+  font-weight: 700;
+  letter-spacing: 2px;
   text-transform: uppercase;
   margin: 4px 0;
 }

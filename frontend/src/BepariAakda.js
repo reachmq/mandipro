@@ -41,7 +41,7 @@ const BepariAakda = () => {
             .aakda-slip { border: 2px solid #1B2A4A; padding: 20px; max-width: 420px; margin: 0 auto; }
             .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 10px; margin-bottom: 15px; }
             .header h2 { margin: 0; font-size: 18px; font-family: 'Cormorant Garamond', Georgia, serif; color: #1B2A4A; }
-            .header .firm-name { font-size: 11px; color: #C5A55A; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 4px 0; }
+            .header .firm-name { font-size: 14px; color: #C5A55A; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin: 4px 0; }
             .header p { margin: 3px 0; font-size: 11px; color: #475569; }
             .party-info { font-size: 16px; font-weight: bold; color: #1B2A4A; margin-bottom: 15px; }
             .sales-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
@@ -172,7 +172,7 @@ const BepariAakda = () => {
             <div ref={printRef} className="aakda-slip-preview">
               <div className="aakda-slip">
                 <div className="header">
-                  <p className="firm-name">Mushtaq Haji Nana & Sons</p>
+                  <p className="firm-name">Haji Mushtaq Nana & Sons</p>
                   <h2>BEPAARI AAKDA</h2>
                   <p>Date: {selectedAakda.date}</p>
                 </div>
@@ -253,7 +253,7 @@ const BepariAakda = () => {
                 </table>
 
                 <div className="footer">
-                  <p>Mushtaq Haji Nana & Sons | Mandi Accounting App</p>
+                  <p>Haji Mushtaq Nana & Sons | Mandi Accounting App</p>
                 </div>
               </div>
             </div>
