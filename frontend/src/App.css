@@ -817,12 +817,11 @@ tr:hover {
 .ss-no-result { padding: 12px 14px; color: #94a3b8; font-size: 13px; text-align: center; }
 
 /* Desktop/Mobile toggle classes */
-.mobile-only { display: none; }
+.mobile-only { display: none !important; }
 .desktop-only { display: block; }
 
 /* Mobile Entry Cards */
 .mobile-cards {
-  display: flex;
   flex-direction: column;
   gap: 10px;
 }
@@ -985,7 +984,7 @@ tr:hover {
   }
   /* Toggle table vs cards on mobile */
   .desktop-only { display: none !important; }
-  .mobile-only { display: block !important; }
+  .mobile-only { display: flex !important; }
   /* Better form spacing on mobile */
   .entry-form {
     padding: 16px;
