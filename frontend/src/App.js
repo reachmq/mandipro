@@ -65,6 +65,7 @@ const Sidebar = () => {
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [todaySales, setTodaySales] = useState([]);
+  const [recentLabel, setRecentLabel] = useState("Today's");
   const [mtd, setMtd] = useState(null);
   const [topRecv, setTopRecv] = useState([]);
   const [topPay, setTopPay] = useState([]);
@@ -83,7 +84,19 @@ const Dashboard = () => {
     ]).then(([bsRes, todayRes, mtdRes, dukRes, bepRes]) => {
       setData(bsRes.data);
       const ts = todayRes.data;
-      setTodaySales(ts.sort((a, b) => b.gross_amount - a.gross_amount).slice(0, 5));
+      if (ts.length > 0) {
+        setTodaySales(ts.sort((a, b) => b.gross_amount - a.gross_amount).slice(0, 5));
+        setRecentLabel("Today's");
+      } else {
+        // No sales today — show most recent from MTD
+        const ms = mtdRes.data;
+        if (ms.length > 0) {
+          const lastDate = [...new Set(ms.map(s => s.date))].sort().pop();
+          const lastDaySales = ms.filter(s => s.date === lastDate);
+          setTodaySales(lastDaySales.sort((a, b) => b.gross_amount - a.gross_amount).slice(0, 5));
+          setRecentLabel(`Recent (${lastDate})`);
+        }
+      }
       const ms = mtdRes.data;
       const uniqueDates = [...new Set(ms.map(s => s.date))];
       setMtd({
@@ -181,10 +194,10 @@ const Dashboard = () => {
 
       {/* Three Columns */}
       <div className="dalal-three-col">
-        {/* Today's Transactions */}
+        {/* Today's / Recent Transactions */}
         <div className="dalal-table-card">
           <div className="dalal-table-header">
-            <h3>Today's Transactions</h3>
+            <h3>{recentLabel} Transactions</h3>
             <span className="dalal-link" onClick={() => navigate('/daily-sales')} data-testid="view-all-sales">View All</span>
           </div>
           <table className="dalal-table">
