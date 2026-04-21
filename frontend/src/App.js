@@ -1910,14 +1910,14 @@ const DukandarLedger = () => {
     return Math.floor((today - d) / (1000 * 60 * 60 * 24));
   };
   const getAgingClass = (d) => {
-    if (d.balance <= 0) return '';
+    if (d.balance <= 0 || !d.last_txn_date) return '';
     const days = getDaysOld(d.last_txn_date);
     if (days > 15) return 'aging-red';
     if (days > 7) return 'aging-yellow';
     return '';
   };
   const getAgingLabel = (d) => {
-    if (d.balance <= 0) return '';
+    if (d.balance <= 0 || !d.last_txn_date) return '';
     const days = getDaysOld(d.last_txn_date);
     if (days > 15) return `${days}d overdue`;
     if (days > 7) return `${days}d`;
