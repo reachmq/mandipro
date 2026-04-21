@@ -1114,6 +1114,21 @@ tr:hover {
   background: #2c5282;
 }
 
+.btn-export {
+  background: #1B2A4A;
+  color: #C5A55A;
+  border: 2px solid #C5A55A;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.btn-export:hover {
+  background: #C5A55A;
+  color: #1B2A4A;
+}
+
 /* Bepaari Aakda Styles */
 .aakda-grid h3 {
   margin-bottom: 15px;

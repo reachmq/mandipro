@@ -1443,6 +1443,187 @@ async def get_single_bepaari_aakda(bepaari_id: str, date: str):
     raise HTTPException(status_code=404, detail="No transactions found for this Bepaari on this date")
 
 
+# ============== EXPORT ALL DATA ==============
+@api_router.get("/export-all")
+async def export_all_data():
+    """Export all data as multi-sheet Excel file"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    header_fill = PatternFill(start_color="1B2A4A", end_color="1B2A4A", fill_type="solid")
+    gold_fill = PatternFill(start_color="C5A55A", end_color="C5A55A", fill_type="solid")
+    thin_border = Border(bottom=Side(style="thin", color="E2E0D8"))
+    num_fmt = '#,##0'
+
+    def style_header(ws, headers):
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+
+    def auto_width(ws):
+        for col in ws.columns:
+            max_len = max((len(str(c.value or "")) for c in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 25)
+
+    # 1. Daily Sales
+    sales = serialize_docs(await db.daily_sales.find().sort([("date", -1), ("created_at", -1)]).to_list(10000))
+    ws1 = wb.active
+    ws1.title = "Daily Sales"
+    style_header(ws1, ["Date", "Bepaari", "Dukandar", "Qty", "Rate", "Gross", "Discount", "Net", "Duk Rate", "Duk Amount"])
+    for i, s in enumerate(sales, 2):
+        ws1.cell(i, 1, s["date"])
+        ws1.cell(i, 2, s.get("bepaari_name", ""))
+        ws1.cell(i, 3, s.get("dukandar_name", ""))
+        ws1.cell(i, 4, s["quantity"])
+        ws1.cell(i, 5, s["rate"]).number_format = num_fmt
+        ws1.cell(i, 6, s["gross_amount"]).number_format = num_fmt
+        ws1.cell(i, 7, s.get("discount", 0)).number_format = num_fmt
+        ws1.cell(i, 8, s.get("net_amount", 0)).number_format = num_fmt
+        ws1.cell(i, 9, s.get("dukandar_rate") or "").number_format = num_fmt
+        ws1.cell(i, 10, s.get("dukandar_amount") or "").number_format = num_fmt
+    auto_width(ws1)
+
+    # 2. Cash & Bank
+    cash = serialize_docs(await db.cash_book.find().sort([("date", -1), ("created_at", -1)]).to_list(10000))
+    ws2 = wb.create_sheet("Cash & Bank")
+    style_header(ws2, ["Date", "Type", "Sub-Type", "Party", "Amount", "BF Disc", "Mode", "Comments"])
+    for i, c in enumerate(cash, 2):
+        ws2.cell(i, 1, c["date"])
+        ws2.cell(i, 2, c["type"])
+        ws2.cell(i, 3, c["sub_type"])
+        ws2.cell(i, 4, c.get("party_name", ""))
+        ws2.cell(i, 5, c["amount"]).number_format = num_fmt
+        ws2.cell(i, 6, c.get("bf_disc", 0)).number_format = num_fmt
+        ws2.cell(i, 7, c["mode"])
+        ws2.cell(i, 8, c.get("particulars", ""))
+    auto_width(ws2)
+
+    # 3. Bepaari Ledger
+    bepaari_ledger = await get_bepaari_ledger()
+    ws3 = wb.create_sheet("Bepaari Ledger")
+    style_header(ws3, ["Name", "Phone", "Opening", "Sales", "Qty", "Commission", "KK", "JB", "Total Ded", "Payments", "Adj", "Balance"])
+    for i, b in enumerate(bepaari_ledger, 2):
+        ws3.cell(i, 1, b["name"])
+        ws3.cell(i, 2, b.get("phone", ""))
+        ws3.cell(i, 3, b["opening"]).number_format = num_fmt
+        ws3.cell(i, 4, b["gross_sales"]).number_format = num_fmt
+        ws3.cell(i, 5, b["quantity"])
+        ws3.cell(i, 6, b["commission"]).number_format = num_fmt
+        ws3.cell(i, 7, b["kk"]).number_format = num_fmt
+        ws3.cell(i, 8, b["jb"]).number_format = num_fmt
+        ws3.cell(i, 9, b["total_deductions"]).number_format = num_fmt
+        ws3.cell(i, 10, b["payments"]).number_format = num_fmt
+        ws3.cell(i, 11, b.get("adjustments", 0)).number_format = num_fmt
+        ws3.cell(i, 12, b["balance"]).number_format = num_fmt
+    auto_width(ws3)
+
+    # 4. Dukandar Ledger
+    dukandar_ledger = await get_dukandar_ledger()
+    ws4 = wb.create_sheet("Dukandar Ledger")
+    style_header(ws4, ["Name", "Phone", "Opening", "Purchases", "Discounts", "Net Receivable", "Receipts", "BF Disc", "Adj", "Balance"])
+    for i, d in enumerate(dukandar_ledger, 2):
+        ws4.cell(i, 1, d["name"])
+        ws4.cell(i, 2, d.get("phone", ""))
+        ws4.cell(i, 3, d["opening"]).number_format = num_fmt
+        ws4.cell(i, 4, d["purchases"]).number_format = num_fmt
+        ws4.cell(i, 5, d["discounts"]).number_format = num_fmt
+        ws4.cell(i, 6, d["net_receivable"]).number_format = num_fmt
+        ws4.cell(i, 7, d["receipts"]).number_format = num_fmt
+        ws4.cell(i, 8, d.get("bf_disc", 0)).number_format = num_fmt
+        ws4.cell(i, 9, d.get("adjustments", 0)).number_format = num_fmt
+        ws4.cell(i, 10, d["balance"]).number_format = num_fmt
+    auto_width(ws4)
+
+    # 5. Balance Sheet
+    bs = await get_balance_sheet()
+    ws5 = wb.create_sheet("Balance Sheet")
+    L = bs["liabilities"]
+    A = bs["assets"]
+    gold_font = Font(bold=True, color="1B2A4A", size=11)
+
+    ws5.cell(1, 1, "LIABILITIES").font = Font(bold=True, size=12, color="1B2A4A")
+    ws5.cell(1, 3, "ASSETS").font = Font(bold=True, size=12, color="1B2A4A")
+    row = 2
+    liab_items = [
+        ("Capital", L["capital"]),
+        ("Loans", L["loans"]),
+        ("Amanat", L["amanat"]),
+        ("Bepaari Payables", L["bepaari_payables"]),
+        ("Dukandar Advances", L.get("dukandar_advances", 0)),
+        ("JB Total", L["jb"]["total"]),
+        ("KK Total", L["kk"]["total"]),
+        ("Commission (Net)", L["commission"]["total"]),
+        ("  Gross Earned", L["commission"]["earned"]),
+        ("  Rate Difference", L["commission"].get("rate_diff", 0)),
+        ("  Less: Discounts", L["commission"]["discounts"]),
+        ("Zakat", L.get("zakat", 0)),
+    ]
+    asset_items = [
+        ("Cash Balance", A["cash_balance"]),
+        ("Bank Balance", A["bank_balance"]),
+        ("Patti (Receivable)", A["patti"]),
+        ("Bepaari Advances", A.get("bepaari_advances", 0)),
+        ("Mandi Expenses", A["mandi_expenses"]["total"]),
+        ("BF Discount", A["bf_discount"]["total"]),
+        ("MHN Personal", A["mhn_personal"]["total"]),
+    ]
+    for name, val in liab_items:
+        ws5.cell(row, 1, name)
+        ws5.cell(row, 2, val).number_format = num_fmt
+        row += 1
+    ws5.cell(row, 1, "TOTAL LIABILITIES").font = gold_font
+    ws5.cell(row, 2, L["total"]).number_format = num_fmt
+    ws5.cell(row, 2).font = gold_font
+
+    row = 2
+    for name, val in asset_items:
+        ws5.cell(row, 3, name)
+        ws5.cell(row, 4, val).number_format = num_fmt
+        row += 1
+    # Advance receivables
+    for ar in A.get("advance_receivables", []):
+        ws5.cell(row, 3, f"Adv: {ar['name']}")
+        ws5.cell(row, 4, ar["amount"]).number_format = num_fmt
+        row += 1
+    ws5.cell(row, 3, "TOTAL ASSETS").font = gold_font
+    ws5.cell(row, 4, A["total"]).number_format = num_fmt
+    ws5.cell(row, 4).font = gold_font
+    row += 1
+    ws5.cell(row, 3, "DIFFERENCE")
+    ws5.cell(row, 4, bs["difference"]).number_format = num_fmt
+    auto_width(ws5)
+
+    # 6. Adjustments
+    adj = serialize_docs(await db.adjustments.find().sort("date", -1).to_list(10000))
+    ws6 = wb.create_sheet("Adjustments")
+    style_header(ws6, ["Date", "Debit Type", "Debit Party", "Credit Type", "Credit Party", "Amount", "Narration"])
+    for i, a in enumerate(adj, 2):
+        ws6.cell(i, 1, a["date"])
+        ws6.cell(i, 2, a["debit_type"])
+        ws6.cell(i, 3, a.get("debit_party_name", ""))
+        ws6.cell(i, 4, a["credit_type"])
+        ws6.cell(i, 5, a.get("credit_party_name", ""))
+        ws6.cell(i, 6, a["amount"]).number_format = num_fmt
+        ws6.cell(i, 7, a.get("narration", ""))
+    auto_width(ws6)
+
+    # Save to buffer
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"Mandi_Data_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

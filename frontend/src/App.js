@@ -2143,6 +2143,12 @@ const Masters = () => {
             <label>Zakat Opening<input type="number" value={settings.zakat_opening || ""} onChange={(e) => setSettings({ ...settings, zakat_opening: parseFloat(e.target.value) })} /></label>
           </div>
           <button className="btn-primary" onClick={handleSettingsUpdate}>Save Settings</button>
+          
+          <div className="export-section" style={{marginTop: 32, paddingTop: 24, borderTop: '2px solid #C5A55A'}}>
+            <h3>Data Export</h3>
+            <p style={{color: '#475569', fontSize: 13, marginBottom: 12}}>Download all data as a single Excel file (Daily Sales, Cash & Bank, Bepaari Ledger, Dukandar Ledger, Balance Sheet, Adjustments)</p>
+            <button className="btn-export" data-testid="export-all-btn" onClick={() => { window.open(`${API}/export-all`, '_blank'); }}>Download All Data (Excel)</button>
+          </div>
         </div>
       ) : (
         <>
