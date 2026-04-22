@@ -1702,6 +1702,7 @@ async def get_collections_view():
     dukandars = serialize_docs(await db.dukandars.find({"is_active": True}).to_list(500))
     all_sales = serialize_docs(await db.daily_sales.find().sort("date", 1).to_list(10000))
     all_cash = serialize_docs(await db.cash_book.find({"type": "DUKANDAR"}).sort("date", 1).to_list(10000))
+    all_adj = serialize_docs(await db.adjustments.find().to_list(5000))
     
     result = []
     
@@ -1732,8 +1733,20 @@ async def get_collections_view():
                 "quantity": 0
             })
         
-        # Get total payments (receipts only — bf_disc inside receipt is already part of receipt amount)
+        # Get total payments: receipts + standalone BF_DISC + JV debits (someone paid on their behalf)
         total_payments = sum(c["amount"] for c in all_cash if c.get("party_id") == did and c.get("sub_type") == "RECEIPT")
+        total_payments += sum(c["amount"] for c in all_cash if c.get("party_id") == did and c.get("sub_type") == "BF_DISC")
+        
+        # JV: DEBIT to this dukandar = reduces their receivable
+        jv_debit = sum(a["amount"] for a in all_adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == did)
+        # JV: CREDIT to this dukandar from expense head = also reduces receivable (write-off)
+        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        jv_writeoff = sum(a["amount"] for a in all_adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == did and a.get("debit_type") in expense_heads)
+        total_payments += jv_debit + jv_writeoff
+        
+        # Also subtract discounts from purchases (discount reduces what's owed)
+        total_discounts = sum(s["discount"] for s in all_sales if s["dukandar_id"] == did)
+        total_payments += total_discounts
         
         # Apply payments FIFO
         remaining_payment = total_payments
