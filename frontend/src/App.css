@@ -1885,6 +1885,21 @@ td:last-child {
   margin-bottom: 25px;
 }
 
+
+.transfer-date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1B2A4A;
+}
+.transfer-date-row input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid #E2E0D8;
+  font-size: 14px;
+}
 .transfer-section {
   flex: 1;
   padding: 20px;

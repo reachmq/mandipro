@@ -19,6 +19,13 @@ const fmtShort = (amount) => {
   return formatCurrency(amount);
 };
 
+const fmtDate = (dateStr) => {
+  if (!dateStr || dateStr === '-' || dateStr === 'Opening') return dateStr || '-';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return dateStr;
+};
+
 // ============== SIDEBAR ==============
 const Sidebar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -96,7 +103,7 @@ const Dashboard = () => {
           const lastDate = [...new Set(ms.map(s => s.date))].sort().pop();
           const lastDaySales = ms.filter(s => s.date === lastDate);
           setTodaySales(lastDaySales.sort((a, b) => b.gross_amount - a.gross_amount).slice(0, 5));
-          setRecentLabel(`Recent (${lastDate})`);
+          setRecentLabel(`Recent (${fmtDate(lastDate)})`);
         }
       }
       const ms = mtdRes.data;
@@ -251,7 +258,7 @@ const Dashboard = () => {
           </table>
           <div className="dalal-total-bar">
             <span>Total Patti</span>
-            <span className="dalal-total-value">{fmtShort(patti)}</span>
+            <span className="dalal-total-value">{formatCurrency(patti)}</span>
           </div>
         </div>
 
@@ -274,7 +281,7 @@ const Dashboard = () => {
           </table>
           <div className="dalal-total-bar">
             <span>Total Payable</span>
-            <span className="dalal-total-value">{fmtShort(bepPay)}</span>
+            <span className="dalal-total-value">{formatCurrency(bepPay)}</span>
           </div>
         </div>
       </div>
@@ -294,7 +301,7 @@ const Dashboard = () => {
                   <tr key={i} className={d.days_old > 15 ? 'aging-red' : 'aging-yellow'}>
                     <td><strong>{d.name}</strong></td>
                     <td style={{textAlign:'center'}}><span className="aging-badge">{d.days_old}d</span></td>
-                    <td style={{textAlign:'center', fontSize: 12, color: '#475569'}}>{d.last_txn_date}</td>
+                    <td style={{textAlign:'center', fontSize: 12, color: '#475569'}}>{fmtDate(d.last_txn_date)}</td>
                     <td style={{textAlign:'right'}} className="dalal-amount recv">{formatCurrency(d.balance)}</td>
                   </tr>
                 ))}
@@ -428,7 +435,7 @@ const DailySales = () => {
           <tbody>
             {sales.map((s) => (
               <tr key={s.id}>
-                <td>{s.date}</td><td>{s.bepaari_name}</td><td>{s.dukandar_name}</td><td>{s.quantity}</td>
+                <td>{fmtDate(s.date)}</td><td>{s.bepaari_name}</td><td>{s.dukandar_name}</td><td>{s.quantity}</td>
                 <td>{formatCurrency(s.rate)}</td>
                 <td>{s.dukandar_rate ? formatCurrency(s.dukandar_rate) : "—"}</td>
                 <td>{formatCurrency(s.gross_amount)}</td><td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
@@ -447,7 +454,7 @@ const DailySales = () => {
         {sales.map((s) => (
           <div key={s.id} className="mobile-entry-card" data-testid="sale-card">
             <div className="mec-header">
-              <span className="mec-date">{s.date}</span>
+              <span className="mec-date">{fmtDate(s.date)}</span>
               <span className="mec-net">{formatCurrency(s.net_amount)}</span>
             </div>
             <div className="mec-parties">
@@ -736,7 +743,7 @@ const CashBook = () => {
           <tbody>
             {sortedEntries.map((e) => (
               <tr key={e.id}>
-                <td>{e.date}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
+                <td>{fmtDate(e.date)}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
                 <td>{formatCurrency(e.amount)}</td>
                 <td className="bf-disc-col">{e.bf_disc > 0 ? formatCurrency(e.bf_disc) : "-"}</td>
                 <td>{e.mode}</td><td className="comments-col">{e.particulars || "-"}</td>
@@ -755,7 +762,7 @@ const CashBook = () => {
         {sortedEntries.map((e) => (
           <div key={e.id} className="mobile-entry-card" data-testid="cash-card">
             <div className="mec-header">
-              <span className="mec-date">{e.date}</span>
+              <span className="mec-date">{fmtDate(e.date)}</span>
               <span className="mec-net">{formatCurrency(e.amount)}</span>
             </div>
             <div className="mec-parties">
@@ -1024,7 +1031,7 @@ const Adjustments = () => {
           <tbody>
             {sortedAdjustments.map((a) => (
               <tr key={a.id}>
-                <td>{a.date}</td>
+                <td>{fmtDate(a.date)}</td>
                 <td><span className="badge debit">{a.debit_type}</span> {a.debit_party_name}</td>
                 <td><span className="badge credit">{a.credit_type}</span> {a.credit_party_name}</td>
                 <td>{formatCurrency(a.amount)}</td>
@@ -1070,6 +1077,7 @@ const BalanceTransfer = () => {
   const [advanceParties, setAdvanceParties] = useState([]);
   const [cashBookEntries, setCashBookEntries] = useState([]);
   const [form, setForm] = useState({
+    date: new Date().toISOString().split('T')[0],
     from_type: "DUKANDAR",
     from_party_id: "",
     to_type: "DUKANDAR",
@@ -1148,7 +1156,7 @@ const BalanceTransfer = () => {
         to_party_id: form.create_new ? null : form.to_party_id,
         to_party_name: form.create_new ? form.to_party_name : null,
         amount: parseFloat(form.amount),
-        date: new Date().toISOString().split('T')[0],
+        date: form.date,
         narration: form.narration
       });
 
@@ -1188,6 +1196,10 @@ const BalanceTransfer = () => {
       {message && <div className="success-message">{message}</div>}
 
       <div className="transfer-container">
+        <div className="transfer-date-row">
+          <label>Transaction Date:</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        </div>
         <div className="transfer-section from-section">
           <h3>FROM (Source Party)</h3>
           <select value={form.from_type} onChange={(e) => setForm({ ...form, from_type: e.target.value, from_party_id: "" })}>
@@ -1669,7 +1681,7 @@ const PartyStatement = () => {
                 </tr>
                 {ledgerEntries.map((e, i) => (
                   <tr key={i} className={e.type === 'sale' ? 'sale-row' : e.type === 'adjustment' ? 'adjustment-row' : e.type === 'transfer' ? 'transfer-info-row' : ''}>
-                    <td>{e.date}</td>
+                    <td>{fmtDate(e.date)}</td>
                     <td>{e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — already in opening bal.)</span>}</td>
                     <td>{e.debit > 0 ? formatCurrency(e.debit) : "-"}</td>
                     <td>{e.credit > 0 ? formatCurrency(e.credit) : "-"}</td>
@@ -1709,7 +1721,7 @@ const PartyStatement = () => {
                 <tbody>
                   {agingData.map((t, i) => (
                     <tr key={i} className={t.status === 'overdue' ? 'aging-row-overdue' : t.status === 'cleared' ? 'aging-row-cleared' : ''}>
-                      <td>{t.date === 'Opening' ? 'B/F Opening' : t.date}</td>
+                      <td>{t.date === 'Opening' ? 'B/F Opening' : fmtDate(t.date)}</td>
                       <td>{formatCurrency(t.original)}</td>
                       <td className={t.remaining === 0 ? 'aging-full' : t.cleared > 0 ? 'aging-partial' : ''}>
                         {formatCurrency(t.cleared)}{t.remaining === 0 ? ' ✅' : t.cleared > 0 ? ' partial' : ''}
@@ -1738,7 +1750,7 @@ const PartyStatement = () => {
 // ============== BEPAARI LEDGER ==============
 const BepariLedger = () => {
   const [ledger, setLedger] = useState([]);
-  const [asOnDate, setAsOnDate] = useState("");
+  const [asOnDate, setAsOnDate] = useState(new Date().toISOString().split('T')[0]);
   const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -1866,7 +1878,7 @@ const BepariLedger = () => {
 // ============== DUKANDAR LEDGER ==============
 const DukandarLedger = () => {
   const [ledger, setLedger] = useState([]);
-  const [asOnDate, setAsOnDate] = useState("");
+  const [asOnDate, setAsOnDate] = useState(new Date().toISOString().split('T')[0]);
   const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -2050,7 +2062,7 @@ const DukandarLedger = () => {
 // ============== BALANCE SHEET ==============
 const BalanceSheet = () => {
   const [data, setData] = useState(null);
-  const [asOnDate, setAsOnDate] = useState("");
+  const [asOnDate, setAsOnDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
