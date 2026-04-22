@@ -1693,6 +1693,109 @@ async def get_activity_log(collection: Optional[str] = None, action: Optional[st
     return serialize_docs(logs)
 
 
+# ============== COLLECTIONS VIEW ==============
+@api_router.get("/collections-view")
+async def get_collections_view():
+    """FIFO-based collections view — shows overdue purchase tranches per dukandar"""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    dukandars = serialize_docs(await db.dukandars.find({"is_active": True}).to_list(500))
+    all_sales = serialize_docs(await db.daily_sales.find().sort("date", 1).to_list(10000))
+    all_cash = serialize_docs(await db.cash_book.find({"type": "DUKANDAR"}).sort("date", 1).to_list(10000))
+    
+    result = []
+    
+    for d in dukandars:
+        did = d["id"]
+        
+        # Get purchases sorted oldest first (FIFO)
+        purchases = []
+        for s in all_sales:
+            if s["dukandar_id"] == did:
+                amt = s.get("dukandar_amount") or s["gross_amount"]
+                purchases.append({
+                    "date": s["date"],
+                    "original": amt,
+                    "remaining": amt,
+                    "bepaari": s.get("bepaari_name", ""),
+                    "quantity": s["quantity"]
+                })
+        
+        # Add opening balance as the oldest "purchase" if positive
+        opening = d.get("opening_balance", 0)
+        if opening > 0:
+            purchases.insert(0, {
+                "date": "Opening",
+                "original": opening,
+                "remaining": opening,
+                "bepaari": "B/F",
+                "quantity": 0
+            })
+        
+        # Get total payments (receipts only — bf_disc inside receipt is already part of receipt amount)
+        total_payments = sum(c["amount"] for c in all_cash if c.get("party_id") == did and c.get("sub_type") == "RECEIPT")
+        
+        # Apply payments FIFO
+        remaining_payment = total_payments
+        for p in purchases:
+            if remaining_payment <= 0:
+                break
+            if remaining_payment >= p["remaining"]:
+                remaining_payment -= p["remaining"]
+                p["remaining"] = 0
+            else:
+                p["remaining"] -= remaining_payment
+                remaining_payment = 0
+        
+        # Filter: only unpaid tranches older than 7 days
+        overdue_tranches = []
+        for p in purchases:
+            if p["remaining"] <= 0:
+                continue
+            if p["date"] == "Opening":
+                days_old = 999
+            else:
+                from datetime import datetime as dt
+                try:
+                    pdate = dt.strptime(p["date"], "%Y-%m-%d")
+                    tdate = dt.strptime(today, "%Y-%m-%d")
+                    days_old = (tdate - pdate).days
+                except:
+                    days_old = 0
+            if days_old > 7:
+                overdue_tranches.append({
+                    "date": p["date"],
+                    "original": p["original"],
+                    "cleared": p["original"] - p["remaining"],
+                    "remaining": p["remaining"],
+                    "days_old": days_old,
+                    "bepaari": p["bepaari"],
+                    "quantity": p["quantity"]
+                })
+        
+        if not overdue_tranches:
+            continue
+        
+        total_overdue = sum(t["remaining"] for t in overdue_tranches)
+        oldest_days = max(t["days_old"] for t in overdue_tranches)
+        oldest_date = min((t["date"] for t in overdue_tranches if t["date"] != "Opening"), default="Opening")
+        
+        result.append({
+            "id": did,
+            "name": d["name"],
+            "phone": d.get("phone", ""),
+            "total_overdue": total_overdue,
+            "oldest_days": oldest_days,
+            "oldest_date": oldest_date,
+            "tranches": overdue_tranches
+        })
+    
+    # Sort by oldest unpaid tranche first
+    result.sort(key=lambda x: -x["oldest_days"])
+    
+    return result
+
+
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
