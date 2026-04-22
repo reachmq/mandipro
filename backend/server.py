@@ -1809,6 +1809,91 @@ async def get_collections_view():
     return result
 
 
+# ============== PAYMENT AGING (FIFO) for a single Dukandar ==============
+@api_router.get("/payment-aging/{dukandar_id}")
+async def get_payment_aging(dukandar_id: str):
+    """FIFO aging for a single dukandar — returns ALL tranches"""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    d = await db.dukandars.find_one({"id": dukandar_id})
+    if not d:
+        return []
+    d = serialize_doc(d)
+    
+    sales = serialize_docs(await db.daily_sales.find({"dukandar_id": dukandar_id}).sort("date", 1).to_list(5000))
+    cash = serialize_docs(await db.cash_book.find({"type": "DUKANDAR", "party_id": dukandar_id}).sort("date", 1).to_list(5000))
+    adj = serialize_docs(await db.adjustments.find().to_list(5000))
+    
+    # Build purchase tranches
+    purchases = []
+    opening = d.get("opening_balance", 0)
+    if opening > 0:
+        purchases.append({"date": "Opening", "original": opening, "remaining": opening, "bepaari": "B/F", "quantity": 0})
+    
+    for s in sales:
+        amt = s.get("dukandar_amount") or s["gross_amount"]
+        purchases.append({"date": s["date"], "original": amt, "remaining": amt, "bepaari": s.get("bepaari_name", ""), "quantity": s["quantity"]})
+    
+    # Total payments (FIFO)
+    total_payments = sum(c["amount"] for c in cash if c.get("sub_type") == "RECEIPT")
+    total_payments += sum(c["amount"] for c in cash if c.get("sub_type") == "BF_DISC")
+    expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+    total_payments += sum(a["amount"] for a in adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == dukandar_id)
+    total_payments += sum(a["amount"] for a in adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == dukandar_id and a.get("debit_type") in expense_heads)
+    total_payments += sum(s["discount"] for s in sales)
+    
+    # Apply FIFO
+    remaining_payment = total_payments
+    for p in purchases:
+        if remaining_payment <= 0:
+            break
+        if remaining_payment >= p["remaining"]:
+            remaining_payment -= p["remaining"]
+            p["remaining"] = 0
+        else:
+            p["remaining"] -= remaining_payment
+            remaining_payment = 0
+    
+    # Build result — ALL tranches
+    result = []
+    for p in purchases:
+        if p["date"] == "Opening":
+            days_old = 999
+        else:
+            from datetime import datetime as dt
+            try:
+                days_old = (dt.strptime(today, "%Y-%m-%d") - dt.strptime(p["date"], "%Y-%m-%d")).days
+            except:
+                days_old = 0
+        
+        cleared = p["original"] - p["remaining"]
+        status = "cleared" if p["remaining"] == 0 else ("overdue" if days_old > 7 else "within_limit")
+        cleared_label = formatCurrency_py(cleared)
+        if p["remaining"] == 0:
+            cleared_label += " (full)"
+        elif cleared > 0:
+            cleared_label += " (partial)"
+        
+        result.append({
+            "date": p["date"],
+            "original": p["original"],
+            "cleared": cleared,
+            "remaining": p["remaining"],
+            "days_old": days_old,
+            "status": status,
+            "bepaari": p["bepaari"],
+            "quantity": p["quantity"]
+        })
+    
+    return result
+
+def formatCurrency_py(amount):
+    """Format currency in Indian style"""
+    if amount == 0:
+        return "0"
+    return f"{amount:,.0f}"
+
+
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

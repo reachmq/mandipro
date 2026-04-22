@@ -36,7 +36,6 @@ const Sidebar = () => {
     { path: "/party-statement", label: "Party Statement", icon: "📄" },
     { path: "/masters", label: "Masters", icon: "⚙️" },
     { path: "/activity-log", label: "Activity Log", icon: "📋" },
-    { path: "/collections", label: "Collections", icon: "📌" },
   ];
 
   return (
@@ -1279,6 +1278,7 @@ const PartyStatement = () => {
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(false);
   const [autoFetched, setAutoFetched] = useState(false);
+  const [agingData, setAgingData] = useState(null);
 
   useEffect(() => {
     Promise.all([axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`)]).then(([b, d]) => {
@@ -1304,6 +1304,12 @@ const PartyStatement = () => {
     const res = await axios.get(url);
     setStatement(res.data);
     setLoading(false);
+    // Fetch aging for dukandars
+    if (partyType === "dukandar" && partyId) {
+      axios.get(`${API}/payment-aging/${partyId}`).then(r => setAgingData(r.data)).catch(() => setAgingData(null));
+    } else {
+      setAgingData(null);
+    }
   };
 
   const downloadExcel = () => {
@@ -1683,6 +1689,46 @@ const PartyStatement = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Payment Aging (FIFO) — Dukandars only */}
+          {agingData && agingData.length > 0 && partyType === "dukandar" && (
+            <div className="aging-section" data-testid="payment-aging">
+              <h3 className="aging-title">Payment Aging (FIFO)</h3>
+              <p className="hint">Payments applied against oldest purchases first</p>
+              <table className="aging-table">
+                <thead>
+                  <tr>
+                    <th>Purchase Date</th>
+                    <th>Purchase Amount</th>
+                    <th>Cleared By Payments</th>
+                    <th>Remaining Unpaid</th>
+                    <th>Days Old</th>
+                    <th>Overdue?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agingData.map((t, i) => (
+                    <tr key={i} className={t.status === 'overdue' ? 'aging-row-overdue' : t.status === 'cleared' ? 'aging-row-cleared' : ''}>
+                      <td>{t.date === 'Opening' ? 'B/F Opening' : t.date}</td>
+                      <td>{formatCurrency(t.original)}</td>
+                      <td className={t.remaining === 0 ? 'aging-full' : t.cleared > 0 ? 'aging-partial' : ''}>
+                        {formatCurrency(t.cleared)}{t.remaining === 0 ? ' ✅' : t.cleared > 0 ? ' partial' : ''}
+                      </td>
+                      <td className={t.remaining > 0 ? 'aging-unpaid' : ''}>{formatCurrency(t.remaining)}</td>
+                      <td>{t.days_old === 999 ? 'B/F' : `${t.days_old}d`}</td>
+                      <td className={`aging-status-${t.status}`}>
+                        {t.status === 'cleared' ? 'No — Cleared' : t.status === 'overdue' ? 'YES' : 'Within limit'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="aging-footer">
+                <span>Overdue: <strong className="aging-unpaid">{formatCurrency(agingData.filter(t => t.status === 'overdue').reduce((s, t) => s + t.remaining, 0))}</strong></span>
+                <span>Within limit: <strong>{formatCurrency(agingData.filter(t => t.status === 'within_limit').reduce((s, t) => s + t.remaining, 0))}</strong></span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2400,86 +2446,6 @@ const ActivityLog = () => {
   );
 };
 
-// ============== COLLECTIONS VIEW ==============
-const CollectionsView = () => {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState({});
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    axios.get(`${API}/collections-view`).then(res => {
-      setData(res.data);
-      setLoading(false);
-    });
-  }, []);
-
-  const toggleExpand = (id) => {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const getAgingStyle = (days) => {
-    if (days > 15) return 'coll-red';
-    if (days > 7) return 'coll-yellow';
-    return '';
-  };
-
-  if (loading) return <div className="loading">Loading...</div>;
-
-  const totalOverdue = data.reduce((s, d) => s + d.total_overdue, 0);
-
-  return (
-    <div className="page">
-      <h2>Collections View</h2>
-      <p className="hint">FIFO-based aging — oldest purchases cleared first by payments. Showing only overdue (&gt;7 days) unpaid balances.</p>
-
-      <div className="coll-summary-bar">
-        <span>{data.length} Dukandars with overdue</span>
-        <span className="coll-total">Total Overdue: {formatCurrency(totalOverdue)}</span>
-      </div>
-
-      <div className="coll-list">
-        {data.map((d) => (
-          <div key={d.id} className={`coll-card ${getAgingStyle(d.oldest_days)}`}>
-            <div className="coll-header" onClick={() => toggleExpand(d.id)}>
-              <div className="coll-left">
-                <span className="coll-expand">{expanded[d.id] ? '▼' : '▶'}</span>
-                <strong className="coll-name" onClick={(e) => { e.stopPropagation(); navigate(`/party-statement?type=dukandar&id=${d.id}`); }}>{d.name}</strong>
-              </div>
-              <div className="coll-right">
-                <span className="coll-amount">{formatCurrency(d.total_overdue)}</span>
-                <span className="coll-age">oldest {d.oldest_date !== 'Opening' ? d.oldest_date : 'B/F'} — {d.oldest_days === 999 ? 'B/F' : `${d.oldest_days}d`}</span>
-                <span className={`coll-dot ${d.oldest_days > 15 ? 'red' : 'yellow'}`}></span>
-              </div>
-            </div>
-            {expanded[d.id] && (
-              <div className="coll-detail">
-                <table className="coll-table">
-                  <thead>
-                    <tr><th>Date</th><th>Bepaari</th><th>Original</th><th>Cleared</th><th>Remaining</th><th>Days</th></tr>
-                  </thead>
-                  <tbody>
-                    {d.tranches.map((t, i) => (
-                      <tr key={i} className={getAgingStyle(t.days_old)}>
-                        <td>{t.date === 'Opening' ? 'B/F Opening' : t.date}</td>
-                        <td>{t.bepaari}{t.quantity > 0 ? ` (${t.quantity} pcs)` : ''}</td>
-                        <td>{formatCurrency(t.original)}</td>
-                        <td className="coll-cleared">{formatCurrency(t.cleared)}</td>
-                        <td className="coll-remaining">{formatCurrency(t.remaining)}</td>
-                        <td><span className={`aging-badge ${t.days_old > 15 ? '' : 'caution'}`}>{t.days_old === 999 ? 'B/F' : `${t.days_old}d`}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 // ============== MAIN APP ==============
 function App() {
   return (
@@ -2500,7 +2466,6 @@ function App() {
             <Route path="/party-statement" element={<PartyStatement />} />
             <Route path="/masters" element={<Masters />} />
             <Route path="/activity-log" element={<ActivityLog />} />
-            <Route path="/collections" element={<CollectionsView />} />
           </Routes>
         </main>
       </div>
