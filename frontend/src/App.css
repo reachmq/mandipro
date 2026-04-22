@@ -1498,6 +1498,30 @@ tr:hover {
   border-top: 3px solid #C5A55A;
 }
 
+@media (max-width: 768px) {
+  .aakda-modal {
+    left: 0 !important;
+    padding: 8px;
+  }
+  .aakda-modal-content {
+    padding: 10px;
+    max-width: 100%;
+  }
+  .aakda-slip-preview {
+    padding: 6px;
+  }
+  .aakda-slip {
+    padding: 10px;
+  }
+  .aakda-slip .header h2 { font-size: 15px; }
+  .aakda-slip .header .firm-name { font-size: 11px; letter-spacing: 1px; }
+  .aakda-slip .sales-table th,
+  .aakda-slip .sales-table td { padding: 4px 3px; font-size: 10px; }
+  .aakda-slip .summary-table td { font-size: 11px; padding: 3px 0; }
+  .aakda-actions { flex-wrap: wrap; gap: 8px; }
+  .aakda-actions button { font-size: 12px; padding: 8px 12px; }
+}
+
 .aakda-actions {
   display: flex;
   justify-content: space-between;
