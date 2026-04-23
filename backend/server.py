@@ -78,6 +78,12 @@ async def get_current_user(request: Request) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+async def require_admin(request: Request) -> dict:
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
 
 # ============== AUTH ENDPOINTS ==============
 @api_router.post("/auth/login")
@@ -230,7 +236,7 @@ async def get_settings():
     return serialize_doc(settings)
 
 @api_router.put("/settings")
-async def update_settings(updates: dict):
+async def update_settings(updates: dict, user: dict = Depends(require_admin)):
     allowed = {"commission_rate", "default_flat_rate", "kk_fixed", "jb_rate", "opening_cash", "opening_bank",
                "jb_opening", "kk_opening", "commission_opening", "zakat_opening",
                "mandi_exp_opening", "bf_disc_opening", "mhn_personal_opening"}
@@ -1015,7 +1021,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
 
 # ============== BALANCE SHEET ==============
 @api_router.get("/balance-sheet")
-async def get_balance_sheet(as_on_date: Optional[str] = None):
+async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depends(require_admin)):
     settings = await get_settings()
     bepaari_ledger = await get_bepaari_ledger(as_on_date)
     dukandar_ledger = await get_dukandar_ledger(as_on_date)
@@ -1664,7 +1670,7 @@ async def get_single_bepaari_aakda(bepaari_id: str, date: str):
 
 # ============== EXPORT ALL DATA ==============
 @api_router.get("/export-all")
-async def export_all_data():
+async def export_all_data(user: dict = Depends(require_admin)):
     """Export all data as multi-sheet Excel file"""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -1845,7 +1851,7 @@ async def export_all_data():
 
 # ============== ACTIVITY LOG ==============
 @api_router.get("/activity-log")
-async def get_activity_log(collection: Optional[str] = None, action: Optional[str] = None, limit: int = 200):
+async def get_activity_log(collection: Optional[str] = None, action: Optional[str] = None, limit: int = 200, user: dict = Depends(require_admin)):
     """Get audit trail of edits and deletes"""
     query = {}
     if collection:

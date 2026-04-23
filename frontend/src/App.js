@@ -93,6 +93,12 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const AdminRoute = ({ children }) => {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return <Navigate to="/" />;
+  return children;
+};
+
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 };
@@ -126,12 +132,15 @@ const Sidebar = () => {
     { path: "/balance-transfer", label: "Balance Transfer", icon: "↔️" },
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
     { path: "/dukandar-ledger", label: "Dukandar Ledger", icon: "📗" },
-    { path: "/balance-sheet", label: "Balance Sheet", icon: "📑" },
+    { path: "/balance-sheet", label: "Balance Sheet", icon: "📑", adminOnly: true },
     { path: "/bepaari-aakda", label: "Bepaari Aakda", icon: "🧾" },
     { path: "/party-statement", label: "Party Statement", icon: "📄" },
-    { path: "/masters", label: "Masters", icon: "⚙️" },
-    { path: "/activity-log", label: "Activity Log", icon: "📋" },
+    { path: "/masters", label: "Masters", icon: "⚙️", adminOnly: true },
+    { path: "/activity-log", label: "Activity Log", icon: "📋", adminOnly: true },
   ];
+
+  const isAdmin = user?.role === 'admin';
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <>
@@ -145,7 +154,7 @@ const Sidebar = () => {
           <span>Accounting App</span>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
@@ -2680,11 +2689,11 @@ function App() {
                     <Route path="/balance-transfer" element={<BalanceTransfer />} />
                     <Route path="/bepaari-ledger" element={<BepariLedger />} />
                     <Route path="/dukandar-ledger" element={<DukandarLedger />} />
-                    <Route path="/balance-sheet" element={<BalanceSheet />} />
+                    <Route path="/balance-sheet" element={<AdminRoute><BalanceSheet /></AdminRoute>} />
                     <Route path="/bepaari-aakda" element={<BepariAakda />} />
                     <Route path="/party-statement" element={<PartyStatement />} />
-                    <Route path="/masters" element={<Masters />} />
-                    <Route path="/activity-log" element={<ActivityLog />} />
+                    <Route path="/masters" element={<AdminRoute><Masters /></AdminRoute>} />
+                    <Route path="/activity-log" element={<AdminRoute><ActivityLog /></AdminRoute>} />
                   </Routes>
                 </main>
               </div>
