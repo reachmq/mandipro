@@ -4,6 +4,129 @@
   box-sizing: border-box;
 }
 
+/* Login Page */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #1B2A4A;
+}
+.login-card {
+  background: white;
+  padding: 40px;
+  width: 100%;
+  max-width: 380px;
+  border-top: 4px solid #C5A55A;
+}
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.login-header h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 36px;
+  color: #1B2A4A;
+  margin: 0;
+}
+.login-header span {
+  font-size: 13px;
+  color: #475569;
+}
+.login-firm {
+  font-size: 12px;
+  color: #C5A55A;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-card input {
+  padding: 12px 16px;
+  border: 1px solid #E2E0D8;
+  font-size: 14px;
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+.login-card input:focus {
+  outline: none;
+  border-color: #C5A55A;
+}
+.login-card button {
+  padding: 14px;
+  background: #1B2A4A;
+  color: #C5A55A;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.login-card button:hover {
+  background: #C5A55A;
+  color: #1B2A4A;
+}
+.login-card button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.login-error {
+  background: rgba(153,27,27,0.08);
+  color: #991B1B;
+  padding: 10px;
+  font-size: 13px;
+  border: 1px solid rgba(153,27,27,0.2);
+}
+
+/* Sidebar user section */
+.sidebar-user {
+  margin-top: auto;
+  padding: 16px 12px;
+  border-top: 1px solid rgba(197,165,90,0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-user-name {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+}
+.sidebar-logout {
+  background: transparent;
+  border: 1px solid rgba(197,165,90,0.3);
+  color: #C5A55A;
+  padding: 6px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sidebar-logout:hover {
+  background: rgba(197,165,90,0.1);
+}
+
+/* Role badge */
+.role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+.role-badge.admin {
+  background: #C5A55A;
+  color: #1B2A4A;
+}
+.role-badge.user {
+  background: #E2E0D8;
+  color: #475569;
+}
+
 body {
   font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background: #F9F8F6;
@@ -26,6 +149,8 @@ body {
   overflow-y: auto;
   z-index: 100;
   transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
@@ -52,6 +177,7 @@ body {
   flex-direction: column;
   gap: 2px;
   padding: 0 10px;
+  flex: 1;
 }
 
 .nav-item {

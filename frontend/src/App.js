@@ -1,11 +1,97 @@
-import { useState, useEffect, useRef } from "react";
-import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
 import SearchableSelect from "./SearchableSelect";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Configure axios to send cookies
+axios.defaults.withCredentials = true;
+
+// ============== AUTH CONTEXT ==============
+const AuthContext = createContext(null);
+
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);     // null = checking, false = not logged in
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    axios.get(`${API}/auth/me`).then(res => {
+      setUser(res.data);
+      setChecking(false);
+    }).catch(() => {
+      setUser(false);
+      setChecking(false);
+    });
+  }, []);
+
+  const login = async (email, password) => {
+    const res = await axios.post(`${API}/auth/login`, { email, password });
+    setUser(res.data);
+    return res.data;
+  };
+
+  const logout = async () => {
+    await axios.post(`${API}/auth/logout`);
+    setUser(false);
+  };
+
+  return <AuthContext.Provider value={{ user, checking, login, logout }}>{children}</AuthContext.Provider>;
+};
+
+const useAuth = () => useContext(AuthContext);
+
+// ============== LOGIN PAGE ==============
+const LoginPage = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate("/");
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Invalid email or password');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="login-page" data-testid="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <h1>Mandi</h1>
+          <span>Accounting App</span>
+          <p className="login-firm">Haji Mushtaq Nana & Sons</p>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div className="login-error" data-testid="login-error">{error}</div>}
+          <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="login-email" />
+          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required data-testid="login-password" />
+          <button type="submit" disabled={loading} data-testid="login-submit">{loading ? 'Signing in...' : 'Sign In'}</button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ============== PROTECTED ROUTE ==============
+const ProtectedRoute = ({ children }) => {
+  const { user, checking } = useAuth();
+  if (checking) return <div className="login-page"><div className="loading">Loading...</div></div>;
+  if (user === false) return <Navigate to="/login" />;
+  return children;
+};
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
@@ -29,6 +115,8 @@ const fmtDate = (dateStr) => {
 // ============== SIDEBAR ==============
 const Sidebar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: "📊" },
@@ -63,6 +151,10 @@ const Sidebar = () => {
               <span className="nav-label">{item.label}</span>
             </NavLink>
           ))}
+          <div className="sidebar-user">
+            <span className="sidebar-user-name">{user?.name || user?.email}</span>
+            <button className="sidebar-logout" onClick={async () => { await logout(); navigate('/login'); }} data-testid="logout-btn">Logout</button>
+          </div>
         </nav>
       </aside>
     </>
@@ -2288,6 +2380,8 @@ const Masters = () => {
             <p style={{color: '#475569', fontSize: 13, marginBottom: 12}}>Download all data as a single Excel file (Daily Sales, Cash & Bank, Bepaari Ledger, Dukandar Ledger, Balance Sheet, Adjustments)</p>
             <button className="btn-export" data-testid="export-all-btn" onClick={() => { window.open(`${API}/export-all`, '_blank'); }}>Download All Data (Excel)</button>
           </div>
+
+          <UserManagement />
         </div>
       ) : (
         <>
@@ -2458,29 +2552,111 @@ const ActivityLog = () => {
   );
 };
 
+// ============== USER MANAGEMENT ==============
+const UserManagement = () => {
+  const { user: currentUser } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState({ email: "", password: "", name: "", role: "user" });
+  const [msg, setMsg] = useState("");
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(`${API}/users`);
+      setUsers(res.data);
+    } catch (e) { }
+  };
+
+  useEffect(() => { if (currentUser?.role === 'admin') fetchUsers(); }, [currentUser]);
+
+  if (currentUser?.role !== 'admin') return null;
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    setMsg("");
+    try {
+      await axios.post(`${API}/users`, form);
+      setForm({ email: "", password: "", name: "", role: "user" });
+      setMsg("User created");
+      fetchUsers();
+    } catch (err) {
+      setMsg(err.response?.data?.detail || "Error creating user");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this user?")) return;
+    try {
+      await axios.delete(`${API}/users/${id}`);
+      fetchUsers();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Error");
+    }
+  };
+
+  return (
+    <div className="user-mgmt" style={{marginTop: 32, paddingTop: 24, borderTop: '2px solid #C5A55A'}}>
+      <h3>User Management</h3>
+      <p className="hint">Create and manage user accounts</p>
+      {msg && <div className="success-message">{msg}</div>}
+      <form className="entry-form" onSubmit={handleAdd} style={{marginBottom: 16}}>
+        <input type="text" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+        <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+        <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button className="btn-primary" type="submit">Add User</button>
+      </form>
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+        <tbody>
+          {users.map(u => (
+            <tr key={u._id}>
+              <td>{u.name}</td>
+              <td>{u.email}</td>
+              <td><span className={`role-badge ${u.role}`}>{u.role}</span></td>
+              <td>{u._id !== currentUser._id && <button className="btn-delete" onClick={() => handleDelete(u._id)}>Delete</button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 // ============== MAIN APP ==============
 function App() {
   return (
     <BrowserRouter>
-      <div className="app-container">
-        <Sidebar />
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/daily-sales" element={<DailySales />} />
-            <Route path="/cash-book" element={<CashBook />} />
-            <Route path="/adjustments" element={<Adjustments />} />
-            <Route path="/balance-transfer" element={<BalanceTransfer />} />
-            <Route path="/bepaari-ledger" element={<BepariLedger />} />
-            <Route path="/dukandar-ledger" element={<DukandarLedger />} />
-            <Route path="/balance-sheet" element={<BalanceSheet />} />
-            <Route path="/bepaari-aakda" element={<BepariAakda />} />
-            <Route path="/party-statement" element={<PartyStatement />} />
-            <Route path="/masters" element={<Masters />} />
-            <Route path="/activity-log" element={<ActivityLog />} />
-          </Routes>
-        </main>
-      </div>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <div className="app-container">
+                <Sidebar />
+                <main className="main-content">
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/daily-sales" element={<DailySales />} />
+                    <Route path="/cash-book" element={<CashBook />} />
+                    <Route path="/adjustments" element={<Adjustments />} />
+                    <Route path="/balance-transfer" element={<BalanceTransfer />} />
+                    <Route path="/bepaari-ledger" element={<BepariLedger />} />
+                    <Route path="/dukandar-ledger" element={<DukandarLedger />} />
+                    <Route path="/balance-sheet" element={<BalanceSheet />} />
+                    <Route path="/bepaari-aakda" element={<BepariAakda />} />
+                    <Route path="/party-statement" element={<PartyStatement />} />
+                    <Route path="/masters" element={<Masters />} />
+                    <Route path="/activity-log" element={<ActivityLog />} />
+                  </Routes>
+                </main>
+              </div>
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

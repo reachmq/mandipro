@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from models import (
     Bepaari, Dukandar, AdvanceParty, CapitalPartner, Settings,
     DailySale, CashBookEntry, DailySaleCreate, CashBookEntryCreate, MasterCreate,
@@ -16,6 +16,9 @@ from models import (
 import uuid
 import io
 import csv
+import bcrypt
+import jwt
+import secrets
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -29,6 +32,158 @@ api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ============== AUTH HELPERS ==============
+JWT_ALGORITHM = "HS256"
+
+def get_jwt_secret():
+    return os.environ["JWT_SECRET"]
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+from bson import ObjectId
+
+async def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user["_id"] = str(user["_id"])
+        user.pop("password_hash", None)
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# ============== AUTH ENDPOINTS ==============
+@api_router.post("/auth/login")
+async def login(request: Request):
+    from fastapi.responses import JSONResponse
+    data = await request.json()
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+    
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    
+    user = await db.users.find_one({"email": email})
+    if not user or not verify_password(password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    user_id = str(user["_id"])
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    
+    response = JSONResponse(content={
+        "id": user_id,
+        "email": user["email"],
+        "name": user.get("name", ""),
+        "role": user.get("role", "user")
+    })
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    return response
+
+@api_router.get("/auth/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    return user
+
+@api_router.post("/auth/logout")
+async def logout():
+    from fastapi.responses import JSONResponse
+    response = JSONResponse(content={"status": "logged out"})
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    return response
+
+@api_router.post("/auth/refresh")
+async def refresh_token(request: Request):
+    from fastapi.responses import JSONResponse
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        new_access = create_access_token(str(user["_id"]), user["email"])
+        response = JSONResponse(content={"status": "refreshed"})
+        response.set_cookie(key="access_token", value=new_access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+        return response
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+# ============== USER MANAGEMENT (Admin only) ==============
+@api_router.get("/users")
+async def get_users(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    users = await db.users.find({}, {"password_hash": 0}).to_list(100)
+    for u in users:
+        u["_id"] = str(u["_id"])
+    return users
+
+@api_router.post("/users")
+async def create_user(request: Request, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    data = await request.json()
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+    name = data.get("name", "")
+    role = data.get("role", "user")
+    
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
+    result = await db.users.insert_one({
+        "email": email,
+        "password_hash": hash_password(password),
+        "name": name,
+        "role": role,
+        "created_at": datetime.now(timezone.utc)
+    })
+    return {"id": str(result.inserted_id), "email": email, "name": name, "role": role}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if user_id == user["_id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    await db.users.delete_one({"_id": ObjectId(user_id)})
+    return {"status": "deleted"}
 
 def serialize_doc(doc):
     if doc and "_id" in doc:
@@ -1896,8 +2051,29 @@ def formatCurrency_py(amount):
 
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
 app.include_router(api_router)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["https://commission-agent.preview.emergentagent.com", "http://localhost:3000"], allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+@app.on_event("startup")
+async def startup_event():
+    # Create indexes
+    await db.users.create_index("email", unique=True)
+    # Seed admin
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@mandi.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "mandi@2026")
+    existing = await db.users.find_one({"email": admin_email})
+    if existing is None:
+        await db.users.insert_one({
+            "email": admin_email,
+            "password_hash": hash_password(admin_password),
+            "name": "Admin",
+            "role": "admin",
+            "created_at": datetime.now(timezone.utc)
+        })
+        logger.info(f"Admin user seeded: {admin_email}")
+    elif not verify_password(admin_password, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        logger.info("Admin password updated")
