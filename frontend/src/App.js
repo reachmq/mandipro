@@ -181,17 +181,20 @@ const Dashboard = () => {
   const [overdue, setOverdue] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
-    Promise.all([
-      axios.get(`${API}/balance-sheet`),
+    const calls = [
+      isAdmin ? axios.get(`${API}/balance-sheet`).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
       axios.get(`${API}/daily-sales?from_date=${today}&to_date=${today}`),
       axios.get(`${API}/daily-sales?from_date=${monthStart}&to_date=${today}`),
       axios.get(`${API}/dukandar-ledger`),
       axios.get(`${API}/bepaari-ledger`),
-    ]).then(([bsRes, todayRes, mtdRes, dukRes, bepRes]) => {
+    ];
+    Promise.all(calls).then(([bsRes, todayRes, mtdRes, dukRes, bepRes]) => {
       setData(bsRes.data);
       const ts = todayRes.data;
       if (ts.length > 0) {
@@ -253,9 +256,11 @@ const Dashboard = () => {
           <h1 className="dalal-h1">Dashboard</h1>
           <p className="dalal-date">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
         </div>
-        <div className={`dalal-badge ${data?.difference === 0 ? 'tallied' : 'pending'}`} data-testid="bs-status-badge">
-          {data?.difference === 0 ? 'BALANCE SHEET TALLIED' : `DIFF: ${formatCurrency(data?.difference)}`}
-        </div>
+        {isAdmin && (
+          <div className={`dalal-badge ${data?.difference === 0 ? 'tallied' : 'pending'}`} data-testid="bs-status-badge">
+            {data?.difference === 0 ? 'BALANCE SHEET TALLIED' : `DIFF: ${formatCurrency(data?.difference)}`}
+          </div>
+        )}
       </div>
 
       {/* MTD Bar */}
@@ -279,16 +284,18 @@ const Dashboard = () => {
             <span className="dalal-mtd-value">{mtd?.days}</span>
             <span className="dalal-mtd-stat-label">Market Days</span>
           </div>
-          <div className="dalal-mtd-divider" />
-          <div className="dalal-mtd-stat">
-            <span className="dalal-mtd-value">{fmtShort(comm.total)}</span>
-            <span className="dalal-mtd-stat-label">Net Commission</span>
-          </div>
+          {isAdmin && <>
+            <div className="dalal-mtd-divider" />
+            <div className="dalal-mtd-stat">
+              <span className="dalal-mtd-value">{fmtShort(comm.total)}</span>
+              <span className="dalal-mtd-stat-label">Net Commission</span>
+            </div>
+          </>}
         </div>
       </div>
 
       {/* Metric Cards */}
-      <div className="dalal-metrics" data-testid="metric-cards">
+      <div className="dalal-metrics" data-testid="metric-cards" style={isAdmin ? {} : {gridTemplateColumns: 'repeat(2, 1fr)'}}>
         <div className="dalal-metric-card" data-testid="metric-today-goats">
           <span className="dalal-metric-label">TODAY'S GOATS</span>
           <span className="dalal-metric-value">{mtd?.todayQty || 0}</span>
@@ -299,21 +306,23 @@ const Dashboard = () => {
           <span className="dalal-metric-value">{fmtShort(mtd?.todayGross)}</span>
           <span className="dalal-metric-sub">{todayAvg > 0 ? `Avg ${formatCurrency(todayAvg)}/head` : 'No sales today'}</span>
         </div>
-        <div className="dalal-metric-card" data-testid="commission-card">
-          <span className="dalal-metric-label">NET COMMISSION</span>
-          <span className="dalal-metric-value">{fmtShort(comm.total)}</span>
-          <span className="dalal-metric-sub">Gross {fmtShort(comm.earned)}{comm.rate_diff > 0 ? ` +${fmtShort(comm.rate_diff)}` : ''} - Disc {fmtShort(comm.discounts)}</span>
-        </div>
-        <div className="dalal-metric-card" data-testid="metric-cash">
-          <span className="dalal-metric-label">CASH BALANCE</span>
-          <span className="dalal-metric-value cash">{formatCurrency(data?.assets?.cash_balance)}</span>
-          <span className="dalal-metric-sub">&nbsp;</span>
-        </div>
-        <div className="dalal-metric-card" data-testid="metric-bank">
-          <span className="dalal-metric-label">BANK BALANCE</span>
-          <span className="dalal-metric-value">{formatCurrency(data?.assets?.bank_balance)}</span>
-          <span className="dalal-metric-sub">&nbsp;</span>
-        </div>
+        {isAdmin && <>
+          <div className="dalal-metric-card" data-testid="commission-card">
+            <span className="dalal-metric-label">NET COMMISSION</span>
+            <span className="dalal-metric-value">{fmtShort(comm.total)}</span>
+            <span className="dalal-metric-sub">Gross {fmtShort(comm.earned)}{comm.rate_diff > 0 ? ` +${fmtShort(comm.rate_diff)}` : ''} - Disc {fmtShort(comm.discounts)}</span>
+          </div>
+          <div className="dalal-metric-card" data-testid="metric-cash">
+            <span className="dalal-metric-label">CASH BALANCE</span>
+            <span className="dalal-metric-value cash">{formatCurrency(data?.assets?.cash_balance)}</span>
+            <span className="dalal-metric-sub">&nbsp;</span>
+          </div>
+          <div className="dalal-metric-card" data-testid="metric-bank">
+            <span className="dalal-metric-label">BANK BALANCE</span>
+            <span className="dalal-metric-value">{formatCurrency(data?.assets?.bank_balance)}</span>
+            <span className="dalal-metric-sub">&nbsp;</span>
+          </div>
+        </>}
       </div>
 
       {/* Three Columns */}
