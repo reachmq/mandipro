@@ -2372,7 +2372,13 @@ const Masters = () => {
         <div className="settings-form">
           <h3>System Settings</h3>
           <div className="settings-grid">
-            <label>Commission %<input type="number" value={settings.commission_rate || ""} onChange={(e) => setSettings({ ...settings, commission_rate: parseFloat(e.target.value) })} /></label>
+            <label>Default Commission %
+              <input type="number" value={settings.commission_rate || ""} onChange={(e) => setSettings({ ...settings, commission_rate: parseFloat(e.target.value), default_flat_rate: null })} />
+            </label>
+            <label className="or-label">OR</label>
+            <label>Default ₹ Per Goat
+              <input type="number" value={settings.default_flat_rate || ""} onChange={(e) => setSettings({ ...settings, default_flat_rate: parseFloat(e.target.value), commission_rate: null })} />
+            </label>
             <label>KK Fixed<input type="number" value={settings.kk_fixed || ""} onChange={(e) => setSettings({ ...settings, kk_fixed: parseFloat(e.target.value) })} /></label>
             <label>JB Rate<input type="number" value={settings.jb_rate || ""} onChange={(e) => setSettings({ ...settings, jb_rate: parseFloat(e.target.value) })} /></label>
             <label>Opening Cash<input type="number" value={settings.opening_cash || ""} onChange={(e) => setSettings({ ...settings, opening_cash: parseFloat(e.target.value) })} /></label>
@@ -2382,6 +2388,7 @@ const Masters = () => {
             <label>Commission Opening<input type="number" value={settings.commission_opening || ""} onChange={(e) => setSettings({ ...settings, commission_opening: parseFloat(e.target.value) })} /></label>
             <label>Zakat Opening<input type="number" value={settings.zakat_opening || ""} onChange={(e) => setSettings({ ...settings, zakat_opening: parseFloat(e.target.value) })} /></label>
           </div>
+          <p className="hint">Default commission model applies to new bepaaris. Each bepaari can override in their individual settings.</p>
           <button className="btn-primary" onClick={handleSettingsUpdate}>Save Settings</button>
           
           <div className="export-section" style={{marginTop: 32, paddingTop: 24, borderTop: '2px solid #C5A55A'}}>
@@ -2403,12 +2410,10 @@ const Masters = () => {
             {activeTab === "bepaaris" && (
               <>
                 <input type="number" placeholder="Commission %" value={form.commission_percent}
-                  onChange={(e) => setForm({ ...form, commission_percent: e.target.value, flat_rate_per_goat: e.target.value ? "" : form.flat_rate_per_goat })}
-                  disabled={!!form.flat_rate_per_goat} />
-                <span style={{fontSize:11,color:'#475569',padding:'0 4px'}}>OR</span>
+                  onChange={(e) => setForm({ ...form, commission_percent: e.target.value, flat_rate_per_goat: "" })} />
+                <span className="or-divider">OR</span>
                 <input type="number" placeholder="₹ Per Goat" value={form.flat_rate_per_goat}
-                  onChange={(e) => setForm({ ...form, flat_rate_per_goat: e.target.value, commission_percent: e.target.value ? "" : "4" })}
-                  disabled={!!form.commission_percent && form.commission_percent !== ""} />
+                  onChange={(e) => setForm({ ...form, flat_rate_per_goat: e.target.value, commission_percent: "" })} />
               </>
             )}
             {activeTab === "capital" && (
@@ -2476,17 +2481,15 @@ const Masters = () => {
                   <label>
                     Commission %:
                     <input type="number" value={editForm.commission_percent}
-                      onChange={(e) => setEditForm({ ...editForm, commission_percent: e.target.value, flat_rate_per_goat: e.target.value ? "" : editForm.flat_rate_per_goat })}
-                      disabled={!!editForm.flat_rate_per_goat}
-                      placeholder={editForm.flat_rate_per_goat ? "Using flat rate" : "e.g. 4"} />
+                      onChange={(e) => setEditForm({ ...editForm, commission_percent: e.target.value, flat_rate_per_goat: "" })}
+                      placeholder="e.g. 4" />
                   </label>
-                  <div style={{textAlign:'center',fontSize:12,color:'#C5A55A',fontWeight:600,padding:'4px 0'}}>— OR —</div>
+                  <div className="or-divider-block">— OR —</div>
                   <label>
                     Flat Rate (₹/goat):
                     <input type="number" value={editForm.flat_rate_per_goat}
-                      onChange={(e) => setEditForm({ ...editForm, flat_rate_per_goat: e.target.value, commission_percent: e.target.value ? "" : "4" })}
-                      disabled={!!editForm.commission_percent && editForm.commission_percent !== ""}
-                      placeholder={editForm.commission_percent ? "Using % model" : "e.g. 500"} />
+                      onChange={(e) => setEditForm({ ...editForm, flat_rate_per_goat: e.target.value, commission_percent: "" })}
+                      placeholder="e.g. 500" />
                   </label>
                 </>
               )}

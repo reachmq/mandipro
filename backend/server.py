@@ -231,7 +231,7 @@ async def get_settings():
 
 @api_router.put("/settings")
 async def update_settings(updates: dict):
-    allowed = {"commission_rate", "kk_fixed", "jb_rate", "opening_cash", "opening_bank",
+    allowed = {"commission_rate", "default_flat_rate", "kk_fixed", "jb_rate", "opening_cash", "opening_bank",
                "jb_opening", "kk_opening", "commission_opening", "zakat_opening",
                "mandi_exp_opening", "bf_disc_opening", "mhn_personal_opening"}
     safe = {k: v for k, v in updates.items() if k in allowed}
