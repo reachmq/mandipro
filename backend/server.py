@@ -231,8 +231,12 @@ async def get_settings():
 
 @api_router.put("/settings")
 async def update_settings(updates: dict):
-    updates["updated_at"] = datetime.utcnow().isoformat()
-    await db.settings.update_one({"id": "settings"}, {"$set": updates}, upsert=True)
+    allowed = {"commission_rate", "kk_fixed", "jb_rate", "opening_cash", "opening_bank",
+               "jb_opening", "kk_opening", "commission_opening", "zakat_opening",
+               "mandi_exp_opening", "bf_disc_opening", "mhn_personal_opening"}
+    safe = {k: v for k, v in updates.items() if k in allowed}
+    safe["updated_at"] = datetime.utcnow().isoformat()
+    await db.settings.update_one({"id": "settings"}, {"$set": safe}, upsert=True)
     return await get_settings()
 
 
@@ -258,7 +262,9 @@ async def create_bepaari(data: MasterCreate):
 
 @api_router.put("/bepaaris/{bepaari_id}")
 async def update_bepaari(bepaari_id: str, data: dict):
-    await db.bepaaris.update_one({"id": bepaari_id}, {"$set": data})
+    allowed = {"name", "phone", "commission_percent", "flat_rate_per_goat", "opening_balance"}
+    safe = {k: v for k, v in data.items() if k in allowed}
+    await db.bepaaris.update_one({"id": bepaari_id}, {"$set": safe})
     return {"status": "updated"}
 
 @api_router.delete("/bepaaris/{bepaari_id}")
@@ -287,7 +293,9 @@ async def create_dukandar(data: MasterCreate):
 
 @api_router.put("/dukandars/{dukandar_id}")
 async def update_dukandar(dukandar_id: str, data: dict):
-    await db.dukandars.update_one({"id": dukandar_id}, {"$set": data})
+    allowed = {"name", "phone", "opening_balance"}
+    safe = {k: v for k, v in data.items() if k in allowed}
+    await db.dukandars.update_one({"id": dukandar_id}, {"$set": safe})
     return {"status": "updated"}
 
 @api_router.delete("/dukandars/{dukandar_id}")
