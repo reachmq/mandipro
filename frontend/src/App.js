@@ -2267,7 +2267,7 @@ const Masters = () => {
   const [advParties, setAdvParties] = useState([]);
   const [capPartners, setCapPartners] = useState([]);
   const [settings, setSettings] = useState({});
-  const [form, setForm] = useState({ name: "", opening_balance: "0", commission_percent: "4", partner_type: "CAPITAL", phone: "" });
+  const [form, setForm] = useState({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", partner_type: "CAPITAL", phone: "" });
   const [activeTab, setActiveTab] = useState("bepaaris");
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState(null);
@@ -2289,9 +2289,11 @@ const Masters = () => {
     const endpoints = { bepaaris: "/bepaaris", dukandars: "/dukandars", advance: "/advance-parties", capital: "/capital-partners" };
     await axios.post(`${API}${endpoints[activeTab]}`, {
       name: form.name, opening_balance: parseFloat(form.opening_balance || 0),
-      commission_percent: parseFloat(form.commission_percent || 4), partner_type: form.partner_type, phone: form.phone
+      commission_percent: form.flat_rate_per_goat ? null : parseFloat(form.commission_percent || 4),
+      flat_rate: form.flat_rate_per_goat ? parseFloat(form.flat_rate_per_goat) : null,
+      partner_type: form.partner_type, phone: form.phone
     });
-    setForm({ name: "", opening_balance: "0", commission_percent: "4", partner_type: "CAPITAL", phone: "" });
+    setForm({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", partner_type: "CAPITAL", phone: "" });
     fetchData();
   };
 
@@ -2308,7 +2310,8 @@ const Masters = () => {
       name: item.name || "",
       phone: item.phone || "",
       opening_balance: item.opening_balance || 0,
-      commission_percent: item.commission_percent || 4,
+      commission_percent: item.flat_rate_per_goat ? "" : (item.commission_percent || 4),
+      flat_rate_per_goat: item.flat_rate_per_goat || "",
       partner_type: item.partner_type || "CAPITAL"
     });
   };
@@ -2321,7 +2324,13 @@ const Masters = () => {
       updates.phone = editForm.phone;
     }
     if (activeTab === "bepaaris") {
-      updates.commission_percent = parseFloat(editForm.commission_percent);
+      if (editForm.flat_rate_per_goat) {
+        updates.flat_rate_per_goat = parseFloat(editForm.flat_rate_per_goat);
+        updates.commission_percent = null;
+      } else {
+        updates.commission_percent = parseFloat(editForm.commission_percent || 4);
+        updates.flat_rate_per_goat = null;
+      }
     }
     updates.opening_balance = parseFloat(editForm.opening_balance);
     
@@ -2391,7 +2400,17 @@ const Masters = () => {
             {(activeTab === "bepaaris" || activeTab === "dukandars") && (
               <input type="text" placeholder="Phone Number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             )}
-            {activeTab === "bepaaris" && <input type="number" placeholder="Commission %" value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: e.target.value })} />}
+            {activeTab === "bepaaris" && (
+              <>
+                <input type="number" placeholder="Commission %" value={form.commission_percent}
+                  onChange={(e) => setForm({ ...form, commission_percent: e.target.value, flat_rate_per_goat: e.target.value ? "" : form.flat_rate_per_goat })}
+                  disabled={!!form.flat_rate_per_goat} />
+                <span style={{fontSize:11,color:'#475569',padding:'0 4px'}}>OR</span>
+                <input type="number" placeholder="₹ Per Goat" value={form.flat_rate_per_goat}
+                  onChange={(e) => setForm({ ...form, flat_rate_per_goat: e.target.value, commission_percent: e.target.value ? "" : "4" })}
+                  disabled={!!form.commission_percent && form.commission_percent !== ""} />
+              </>
+            )}
             {activeTab === "capital" && (
               <select value={form.partner_type} onChange={(e) => setForm({ ...form, partner_type: e.target.value })}>
                 <option value="CAPITAL">CAPITAL</option><option value="LOAN">LOAN</option><option value="AMANAT">AMANAT</option>
@@ -2407,7 +2426,7 @@ const Masters = () => {
                   <th>Name</th>
                   {(activeTab === "bepaaris" || activeTab === "dukandars") && <th>Phone</th>}
                   <th>Opening Balance</th>
-                  {activeTab === "bepaaris" && <th>Commission %</th>}
+                  {activeTab === "bepaaris" && <th>Commission Model</th>}
                   {activeTab === "capital" && <th>Type</th>}
                   <th>Actions</th>
                 </tr>
@@ -2418,7 +2437,7 @@ const Masters = () => {
                     <td>{item.name}</td>
                     {(activeTab === "bepaaris" || activeTab === "dukandars") && <td>{item.phone || "-"}</td>}
                     <td>{formatCurrency(item.opening_balance)}</td>
-                    {activeTab === "bepaaris" && <td>{item.commission_percent}%</td>}
+                    {activeTab === "bepaaris" && <td>{item.flat_rate_per_goat ? `₹${item.flat_rate_per_goat}/goat` : `${item.commission_percent}%`}</td>}
                     {activeTab === "capital" && <td>{item.partner_type}</td>}
                     <td>
                       <button className="btn-edit" onClick={() => handleEdit(item)} data-testid={`edit-${item.id}`}>Edit</button>
@@ -2453,10 +2472,23 @@ const Masters = () => {
                 <input type="number" value={editForm.opening_balance} onChange={(e) => setEditForm({ ...editForm, opening_balance: e.target.value })} />
               </label>
               {activeTab === "bepaaris" && (
-                <label>
-                  Commission %:
-                  <input type="number" value={editForm.commission_percent} onChange={(e) => setEditForm({ ...editForm, commission_percent: e.target.value })} />
-                </label>
+                <>
+                  <label>
+                    Commission %:
+                    <input type="number" value={editForm.commission_percent}
+                      onChange={(e) => setEditForm({ ...editForm, commission_percent: e.target.value, flat_rate_per_goat: e.target.value ? "" : editForm.flat_rate_per_goat })}
+                      disabled={!!editForm.flat_rate_per_goat}
+                      placeholder={editForm.flat_rate_per_goat ? "Using flat rate" : "e.g. 4"} />
+                  </label>
+                  <div style={{textAlign:'center',fontSize:12,color:'#C5A55A',fontWeight:600,padding:'4px 0'}}>— OR —</div>
+                  <label>
+                    Flat Rate (₹/goat):
+                    <input type="number" value={editForm.flat_rate_per_goat}
+                      onChange={(e) => setEditForm({ ...editForm, flat_rate_per_goat: e.target.value, commission_percent: e.target.value ? "" : "4" })}
+                      disabled={!!editForm.commission_percent && editForm.commission_percent !== ""}
+                      placeholder={editForm.commission_percent ? "Using % model" : "e.g. 500"} />
+                  </label>
+                </>
               )}
             </div>
             <div className="modal-actions">
