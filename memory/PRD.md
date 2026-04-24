@@ -158,4 +158,8 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 
 ---
 
-*Last Updated: 08 April 2026*
+## Recent Updates (Feb 2026)
+- Applied Dalal Premium theme to all print templates (Cash & Bank, Party Statement, Bepaari Ledger, Dukandar Ledger)
+- Hidden 0-balance Bepaaris and Dukandars from Ledger tables and prints (filter: `balance !== 0`)
+
+*Last Updated: Feb 2026*

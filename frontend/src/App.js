@@ -802,6 +802,32 @@ const CashBook = () => {
         <label>To:</label><input type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} />
         <button className="btn-primary" onClick={applyFilters}>Search</button>
         <button className="btn-clear" onClick={() => { setFilters({ fromDate: "", toDate: "", type: "", subType: "", party: "", mode: "" }); fetchData(); }}>Clear All</button>
+        <button className="btn-print" onClick={() => {
+          const printDate = new Date().toLocaleDateString('en-IN');
+          const dateRange = filters.fromDate ? `${fmtDate(filters.fromDate)} to ${fmtDate(filters.toDate || 'Present')}` : 'All dates';
+          const w = window.open('', '', 'width=1000,height=700');
+          w.document.write(`<html><head><title>Cash & Bank</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+              body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; }
+              .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 12px; margin-bottom: 16px; }
+              .header h1 { font-family: 'Cormorant Garamond', serif; color: #1B2A4A; font-size: 22px; margin: 0; }
+              .header .firm { color: #C5A55A; font-size: 11px; font-weight: 700; letter-spacing: 2px; margin: 4px 0; }
+              .header .meta { color: #475569; font-size: 11px; }
+              table { width: 100%; border-collapse: collapse; }
+              th { background: #1B2A4A; color: white; padding: 8px 6px; font-size: 10px; text-transform: uppercase; text-align: left; }
+              td { padding: 6px; border-bottom: 1px solid #E2E0D8; font-size: 11px; }
+              .total { border-top: 3px solid #C5A55A; font-weight: 700; font-size: 13px; }
+              .footer { text-align: center; margin-top: 16px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
+            </style></head><body>
+            <div class="header"><p class="firm">HAJI MUSHTAQ NANA & SONS</p><h1>CASH & BANK REGISTER</h1><p class="meta">${dateRange} | ${sortedEntries.length} entries | Generated: ${printDate}</p></div>
+            <table><thead><tr><th>Date</th><th>Type</th><th>Sub-Type</th><th>Party</th><th>Amount</th><th>BF Disc</th><th>Mode</th><th>Comments</th></tr></thead><tbody>
+            ${sortedEntries.map(e => `<tr><td>${fmtDate(e.date)}</td><td>${e.type}</td><td>${e.sub_type}</td><td>${e.party_name || '-'}</td><td style="text-align:right">${e.amount.toLocaleString('en-IN')}</td><td style="text-align:right">${e.bf_disc > 0 ? e.bf_disc.toLocaleString('en-IN') : '-'}</td><td>${e.mode}</td><td>${e.particulars || '-'}</td></tr>`).join('')}
+            <tr class="total"><td colspan="4">Total (${sortedEntries.length} entries)</td><td style="text-align:right">${filteredTotal.toLocaleString('en-IN')}</td><td colspan="3"></td></tr>
+            </tbody></table>
+            <p class="footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons</p></body></html>`);
+          w.document.close(); w.print();
+        }}>Print / Save PDF</button>
       </div>
 
       {(filters.type || filters.subType || filters.party || filters.mode) && (
@@ -1667,26 +1693,29 @@ const PartyStatement = () => {
       <head>
         <title>Ledger - ${statement.party.name}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-          h1 { text-align: center; color: #1B2A4A; margin-bottom: 5px; font-size: 18px; }
-          .subtitle { text-align: center; color: #666; margin-bottom: 5px; }
-          .period { text-align: center; color: #333; margin-bottom: 15px; }
+          @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+          body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; font-size: 12px; }
+          .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 12px; margin-bottom: 16px; }
+          .header .firm { color: #C5A55A; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+          .header h1 { font-family: 'Cormorant Garamond', serif; color: #1B2A4A; font-size: 20px; margin: 4px 0; }
+          .header .meta { color: #475569; font-size: 11px; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ddd; padding: 6px 8px; }
-          th { background: #1B2A4A; color: white; text-align: center; }
-          td { text-align: right; }
+          th { background: #1B2A4A; color: white; padding: 8px; font-size: 10px; text-transform: uppercase; text-align: center; }
+          td { padding: 6px 8px; border-bottom: 1px solid #E2E0D8; text-align: right; }
           td:first-child, td:nth-child(2) { text-align: left; }
-          .total-row { background: #f0f0f0; font-weight: bold; }
-          .opening-row { background: #e8f4f8; font-weight: bold; }
-          .closing-row { background: #d4edda; font-weight: bold; }
-          .print-footer { margin-top: 20px; text-align: center; font-size: 10px; color: #888; }
+          .total-row { background: rgba(197,165,90,0.1); font-weight: bold; border-top: 2px solid #C5A55A; }
+          .opening-row { background: rgba(27,42,74,0.06); font-weight: bold; }
+          .closing-row { background: #1B2A4A; color: white; font-weight: bold; font-size: 13px; }
+          .footer { text-align: center; margin-top: 16px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
           @media print { body { padding: 10px; } }
         </style>
       </head>
       <body>
-        <h1>LEDGER - ${statement.party.name}</h1>
-        <p class="subtitle">Phone: ${statement.party.phone || 'N/A'}</p>
-        <p class="period">Period: ${fromDate || 'Beginning'} to ${toDate || printDate}</p>
+        <div class="header">
+          <p class="firm">HAJI MUSHTAQ NANA & SONS</p>
+          <h1>PARTY STATEMENT — ${statement.party.name}</h1>
+          <p class="meta">${partyType.toUpperCase()} | Phone: ${statement.party.phone || 'N/A'} | Period: ${fmtDate(fromDate) || 'Beginning'} to ${fmtDate(toDate) || fmtDate(printDate)}</p>
+        </div>
         <table>
           <thead>
             <tr>
@@ -1707,7 +1736,7 @@ const PartyStatement = () => {
             </tr>
             ${ledgerEntries.map(e => `
               <tr${e.infoOnly ? ' style="color:#999;font-style:italic"' : ''}>
-                <td>${e.date}</td>
+                <td>${fmtDate(e.date)}</td>
                 <td>${e.description}${e.infoOnly ? ` (${e.transferAmount.toLocaleString('en-IN')} — already in opening bal.)` : ''}</td>
                 <td>${e.debit > 0 ? e.debit.toLocaleString('en-IN') : '-'}</td>
                 <td>${e.credit > 0 ? e.credit.toLocaleString('en-IN') : '-'}</td>
@@ -1726,7 +1755,7 @@ const PartyStatement = () => {
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons on ${printDate}</p>
+        <p class="footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons</p>
       </body>
       </html>
     `;
@@ -1877,7 +1906,7 @@ const BepariLedger = () => {
   if (loading) return <div className="loading">Loading...</div>;
 
   // Sorting
-  const sortedLedger = [...ledger].filter(b => b.gross_sales > 0 || b.opening > 0 || b.balance !== 0).sort((a, b) => {
+  const sortedLedger = [...ledger].filter(b => b.balance !== 0).sort((a, b) => {
     if (sortBy === "name-asc") return a.name.localeCompare(b.name);
     if (sortBy === "name-desc") return b.name.localeCompare(a.name);
     if (sortBy === "balance-desc") return b.balance - a.balance;
@@ -1896,22 +1925,23 @@ const BepariLedger = () => {
     const printContent = `
       <html><head><title>Bepaari Ledger</title>
       <style>
-        body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 20px; font-size: 12px; }
-        h1 { font-family: 'Cormorant Garamond', Georgia, serif; color: #1B2A4A; font-size: 22px; margin-bottom: 4px; }
-        .subtitle { color: #475569; font-size: 12px; margin-bottom: 16px; }
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; font-size: 12px; }
+        .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 12px; margin-bottom: 16px; }
+        .header .firm { color: #C5A55A; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+        .header h1 { font-family: 'Cormorant Garamond', serif; color: #1B2A4A; font-size: 22px; margin: 4px 0; }
+        .header .meta { color: #475569; font-size: 11px; }
         table { width: 100%; border-collapse: collapse; }
         th { background: #1B2A4A; color: white; padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; }
         th:first-child { text-align: left; }
-        td { padding: 6px; border-bottom: 1px solid #e2e8f0; text-align: right; font-size: 11px; }
+        td { padding: 6px; border-bottom: 1px solid #E2E0D8; text-align: right; font-size: 11px; }
         td:first-child { text-align: left; font-weight: 600; }
-        .total-row td { border-top: 2px solid #1B2A4A; font-weight: 700; }
+        .total-row td { border-top: 3px solid #C5A55A; font-weight: 700; background: rgba(197,165,90,0.1); }
         .positive { color: #166534; }
         .negative { color: #991B1B; }
-        .footer { text-align: center; margin-top: 16px; font-size: 10px; color: #888; }
-        @media print { body { padding: 10px; } }
+        .footer { text-align: center; margin-top: 16px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
       </style></head><body>
-        <h1>BEPAARI LEDGER</h1>
-        <p class="subtitle">${asOnDate ? 'As on: ' + asOnDate : 'Current'} | Generated: ${printDate}</p>
+        <div class="header"><p class="firm">HAJI MUSHTAQ NANA & SONS</p><h1>BEPAARI LEDGER</h1><p class="meta">${asOnDate ? 'As on: ' + fmtDate(asOnDate) : 'Current'} | Generated: ${printDate}</p></div>
         <table>
           <thead><tr><th>Name</th><th>Opening</th><th>Sales</th><th>Qty</th><th>Comm</th><th>KK</th><th>JB</th><th>Deductions</th><th>Payments</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
@@ -2003,53 +2033,33 @@ const DukandarLedger = () => {
   useEffect(() => { fetchData(); }, [asOnDate]);
 
   const handlePrint = () => {
-    const printDate = asOnDate || new Date().toISOString().split('T')[0];
-    const printWindow = window.open('', '_blank');
+    const printDate = new Date().toLocaleDateString('en-IN');
     const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Patti - Dukandar Outstanding - ${printDate}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { text-align: center; color: #1B2A4A; margin-bottom: 5px; }
-          .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #E2E0D8; padding: 8px; text-align: right; font-size: 12px; }
-          th { background: #1B2A4A; color: white; }
-          td:first-child, th:first-child { text-align: left; }
-          .total-row { background: #F9F8F6; font-weight: bold; }
-          .positive { color: #166534; }
-          .negative { color: #991B1B; }
-          .print-footer { margin-top: 30px; text-align: center; font-size: 11px; color: #888; }
-          @media print { 
-            body { padding: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <h1>PATTI - Dukandar Outstanding</h1>
-        <p class="subtitle">As on: ${printDate}</p>
+      <html><head><title>Patti - Dukandar Outstanding</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; font-size: 12px; }
+        .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 12px; margin-bottom: 16px; }
+        .header .firm { color: #C5A55A; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+        .header h1 { font-family: 'Cormorant Garamond', serif; color: #1B2A4A; font-size: 22px; margin: 4px 0; }
+        .header .meta { color: #475569; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1B2A4A; color: white; padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; }
+        th:first-child { text-align: left; }
+        td { padding: 6px; border-bottom: 1px solid #E2E0D8; text-align: right; font-size: 11px; }
+        td:first-child { text-align: left; font-weight: 600; }
+        .total-row td { border-top: 3px solid #C5A55A; font-weight: 700; background: rgba(197,165,90,0.1); }
+        .positive { color: #166534; }
+        .negative { color: #991B1B; }
+        .footer { text-align: center; margin-top: 16px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
+      </style></head><body>
+        <div class="header"><p class="firm">HAJI MUSHTAQ NANA & SONS</p><h1>PATTI &mdash; DUKANDAR OUTSTANDING</h1><p class="meta">${asOnDate ? 'As on: ' + fmtDate(asOnDate) : 'Current'} | Generated: ${printDate}</p></div>
         <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Opening</th>
-              <th>Purchases</th>
-              <th>Discounts</th>
-              <th>Receipts</th>
-              <th>BF Disc</th>
-              <th>Adj</th>
-              <th>Balance</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Name</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Receipts</th><th>BF Disc</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
             ${sortedLedger.map(d => `
               <tr>
-                <td><strong>${d.name}</strong></td>
-                <td>${d.phone || '-'}</td>
+                <td>${d.name}</td>
                 <td>${d.opening.toLocaleString('en-IN')}</td>
                 <td>${d.purchases.toLocaleString('en-IN')}</td>
                 <td>${d.discounts.toLocaleString('en-IN')}</td>
@@ -2060,25 +2070,23 @@ const DukandarLedger = () => {
               </tr>
             `).join('')}
             <tr class="total-row">
-              <td><strong>TOTAL PATTI</strong></td>
-              <td></td>
+              <td>TOTAL PATTI</td>
               <td>-</td>
               <td>${totals.purchases.toLocaleString('en-IN')}</td>
               <td>${totals.discounts.toLocaleString('en-IN')}</td>
               <td>${totals.receipts.toLocaleString('en-IN')}</td>
               <td>${totals.bf_disc > 0 ? totals.bf_disc.toLocaleString('en-IN') : '-'}</td>
               <td>${totals.adj > 0 ? totals.adj.toLocaleString('en-IN') : '-'}</td>
-              <td><strong>${totals.balance.toLocaleString('en-IN')}</strong></td>
+              <td>${totals.balance.toLocaleString('en-IN')}</td>
             </tr>
           </tbody>
         </table>
-        <p class="print-footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons</p>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
+        <p class="footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons on ${printDate}</p>
+      </body></html>`;
+    const w = window.open('', '', 'width=1000,height=700');
+    w.document.write(printContent);
+    w.document.close();
+    w.print();
   };
 
   if (loading) return <div className="loading">Loading...</div>;
@@ -2106,7 +2114,7 @@ const DukandarLedger = () => {
   };
 
   // Sorting
-  const sortedLedger = [...ledger].filter(d => d.purchases > 0 || d.opening > 0 || d.balance !== 0).sort((a, b) => {
+  const sortedLedger = [...ledger].filter(d => d.balance !== 0).sort((a, b) => {
     if (sortBy === "name-asc") return a.name.localeCompare(b.name);
     if (sortBy === "name-desc") return b.name.localeCompare(a.name);
     if (sortBy === "balance-desc") return b.balance - a.balance;
