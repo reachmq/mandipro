@@ -1419,6 +1419,7 @@ const PartyStatement = () => {
   const [searchParams] = useSearchParams();
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
+  const [settings, setSettings] = useState({ commission_rate: 4, jb_rate: 10, kk_fixed: 100 });
   const [partyType, setPartyType] = useState(searchParams.get("type") || "bepaari");
   const [partyId, setPartyId] = useState(searchParams.get("id") || "");
   const [fromDate, setFromDate] = useState("");
@@ -1429,9 +1430,14 @@ const PartyStatement = () => {
   const [agingData, setAgingData] = useState(null);
 
   useEffect(() => {
-    Promise.all([axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`)]).then(([b, d]) => {
+    Promise.all([
+      axios.get(`${API}/bepaaris`),
+      axios.get(`${API}/dukandars`),
+      axios.get(`${API}/settings`)
+    ]).then(([b, d, s]) => {
       setBeparis(b.data);
       setDukandars(d.data);
+      setSettings(s.data || {});
     });
   }, []);
 
@@ -1501,16 +1507,24 @@ const PartyStatement = () => {
         }
       });
       
-      // Calculate commission, JB, KK per day (approximate based on qty)
-      // We'll get this from the Aakda-style calculation
-      const settings = { commission_rate: 4, jb_rate: 10, kk_fixed: 100 };
-      
+      // Calculate commission, JB, KK per day using actual settings + per-bepaari overrides
+      // Mirrors backend logic in /api/bepaari-ledger (server.py line 901-908)
+      const selectedBepaari = bepaaris.find(b => b.id === partyId) || {};
+      const flatRate = selectedBepaari.flat_rate_per_goat; // per-goat flat overrides %
+      const commissionRate = selectedBepaari.commission_percent != null
+        ? selectedBepaari.commission_percent
+        : (settings.commission_rate ?? 4);
+      const jbRate = settings.jb_rate ?? 10;
+      const kkFixed = settings.kk_fixed ?? 100;
+
       // Add NET sales entries per date
       Object.keys(salesByDate).sort().forEach(date => {
         const s = salesByDate[date];
-        const commission = s.gross * (settings.commission_rate / 100);
-        const jb = s.qty * settings.jb_rate;
-        const kk = settings.kk_fixed; // Per market day
+        const commission = flatRate
+          ? s.qty * flatRate
+          : s.gross * (commissionRate / 100);
+        const jb = s.qty * jbRate;
+        const kk = kkFixed; // Per market day
         const otherExpenses = expensesByDate[date] || 0;
         const netAmount = s.gross - commission - jb - kk - otherExpenses;
         
