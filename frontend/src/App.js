@@ -1811,6 +1811,18 @@ const PartyStatement = () => {
           <div className="party-info">
             <h3>{statement.party.name}</h3>
             <p>Phone: {statement.party.phone || "N/A"} | Period: {fromDate || "Beginning"} to {toDate || "Current"}</p>
+            {partyType === "bepaari" && (() => {
+              const b = bepaaris.find(x => x.id === partyId) || {};
+              const flat = b.flat_rate_per_goat;
+              const commLabel = flat
+                ? `Commission: ₹${flat}/goat (flat)`
+                : `Commission: ${b.commission_percent != null ? b.commission_percent : (settings.commission_rate ?? 4)}%${b.commission_percent != null ? ' (override)' : ''}`;
+              return (
+                <p className="rate-snapshot" data-testid="rate-snapshot">
+                  <span className="rate-snapshot-label">Rates applied:</span> {commLabel} · JB: ₹{settings.jb_rate ?? 10}/pc · KK: ₹{settings.kk_fixed ?? 100}/day
+                </p>
+              );
+            })()}
           </div>
 
           <div className="ledger-table">
