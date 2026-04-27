@@ -830,6 +830,26 @@ const CashBook = () => {
         }}>Print / Save PDF</button>
       </div>
 
+      {/* Mobile Filters - dropdown row (only visible on mobile) */}
+      <div className="mobile-filters mobile-only" data-testid="mobile-cash-filters">
+        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} data-testid="m-filter-type">
+          <option value="">Type ▼</option>
+          {types.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filters.subType} onChange={(e) => setFilters({ ...filters, subType: e.target.value })} data-testid="m-filter-subtype">
+          <option value="">Sub-Type ▼</option>
+          {uniqueSubTypes.map((st) => <option key={st} value={st}>{st}</option>)}
+        </select>
+        <select value={filters.party} onChange={(e) => setFilters({ ...filters, party: e.target.value })} data-testid="m-filter-party">
+          <option value="">Party ▼</option>
+          {uniqueParties.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={filters.mode} onChange={(e) => setFilters({ ...filters, mode: e.target.value })} data-testid="m-filter-mode">
+          <option value="">Mode ▼</option>
+          {modes.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+
       {(filters.type || filters.subType || filters.party || filters.mode) && (
         <div className="filter-summary">
           <strong>Filters:</strong> 
@@ -1495,17 +1515,7 @@ const PartyStatement = () => {
         salesByDate[s.date].gross += s.gross_amount;
       });
       
-      // Group expenses by date
-      const expensesByDate = {};
-      statement.cash_entries.forEach(c => {
-        if (c.sub_type !== "PAYMENT") {
-          // This is an expense (MOTOR, BHUSSA, GAWALI, CASH_ADV)
-          if (!expensesByDate[c.date]) {
-            expensesByDate[c.date] = 0;
-          }
-          expensesByDate[c.date] += c.amount;
-        }
-      });
+      // Group expenses by date for display only (not used in net calc — they show as separate dated lines)
       
       // Calculate commission, JB, KK per day using actual settings + per-bepaari overrides
       // Mirrors backend logic in /api/bepaari-ledger (server.py line 901-908)
@@ -1517,7 +1527,7 @@ const PartyStatement = () => {
       const jbRate = settings.jb_rate ?? 10;
       const kkFixed = settings.kk_fixed ?? 100;
 
-      // Add NET sales entries per date
+      // Add NET sales entries per date (only Comm/JB/KK netted off; other cash expenses appear as separate dated lines below for audit)
       Object.keys(salesByDate).sort().forEach(date => {
         const s = salesByDate[date];
         const commission = flatRate
@@ -1525,19 +1535,19 @@ const PartyStatement = () => {
           : s.gross * (commissionRate / 100);
         const jb = s.qty * jbRate;
         const kk = kkFixed; // Per market day
-        const otherExpenses = expensesByDate[date] || 0;
-        const netAmount = s.gross - commission - jb - kk - otherExpenses;
-        
+        const netAmount = s.gross - commission - jb - kk;
+
         entries.push({
           date: date,
-          description: `Sales (${s.qty} pcs) - Net after deductions`,
+          description: `Sales (${s.qty} pcs) - Net of Comm/JB/KK`,
           debit: 0,
           credit: netAmount,
           type: 'sale'
         });
       });
-      
-      // Add PAYMENT entries only (not other expenses - they're already deducted)
+
+      // Add ALL non-PAYMENT cash entries (MOTOR/BHUSSA/GAWALI/CASH_ADV) as separate debit lines on their own date
+      // Critical: these reduce our payable to the bepaari, so they MUST appear regardless of whether sales happened that day
       statement.cash_entries.forEach(c => {
         if (c.sub_type === "PAYMENT") {
           entries.push({
@@ -1546,6 +1556,14 @@ const PartyStatement = () => {
             debit: c.amount,
             credit: 0,
             type: 'cash'
+          });
+        } else {
+          entries.push({
+            date: c.date,
+            description: `${c.sub_type}${c.particulars ? ' - ' + c.particulars : ''}`,
+            debit: c.amount,
+            credit: 0,
+            type: 'expense'
           });
         }
       });

@@ -973,6 +973,29 @@ tr:hover {
 .mobile-only { display: none !important; }
 .desktop-only { display: block; }
 
+/* Mobile Filter Row */
+.mobile-filters {
+  display: none;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: #F9F8F6;
+  border: 1px solid #E2E0D8;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.mobile-filters select {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid #C5A55A;
+  border-radius: 4px;
+  background: #fff;
+  color: #1B2A4A;
+  font-weight: 500;
+}
+
 /* Mobile Entry Cards */
 .mobile-cards {
   flex-direction: column;
