@@ -2082,7 +2082,7 @@ const DukandarLedger = () => {
       <html><head><title>Patti - Dukandar Outstanding</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
-        body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; font-size: 12px; }
+        body { font-family: 'IBM Plex Sans', sans-serif; padding: 20px; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 12px; margin-bottom: 16px; }
         .header .firm { color: #C5A55A; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
         .header h1 { font-family: 'Cormorant Garamond', serif; color: #1B2A4A; font-size: 22px; margin: 4px 0; }
@@ -2095,15 +2095,41 @@ const DukandarLedger = () => {
         .total-row td { border-top: 3px solid #C5A55A; font-weight: 700; background: rgba(197,165,90,0.1); }
         .positive { color: #166534; }
         .negative { color: #991B1B; }
+        .aging-red { background: #FEE2E2; }
+        .aging-red td:first-child::after { content: " ●"; color: #991B1B; font-weight: 700; }
+        .aging-yellow { background: #FEF3C7; }
+        .aging-yellow td:first-child::after { content: " ●"; color: #92400E; font-weight: 700; }
+        .aging-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 9px; font-weight: 700; border-radius: 3px; }
+        .badge-red { background: #991B1B; color: #fff; }
+        .badge-yellow { background: #F59E0B; color: #1B2A4A; }
+        .legend { margin-bottom: 10px; font-size: 10px; color: #475569; display: flex; gap: 14px; }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+        .legend .dot.red { background: #991B1B; }
+        .legend .dot.yellow { background: #F59E0B; }
+        .legend .dot.green { background: #166534; }
         .footer { text-align: center; margin-top: 16px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
       </style></head><body>
         <div class="header"><p class="firm">HAJI MUSHTAQ NANA & SONS</p><h1>PATTI &mdash; DUKANDAR OUTSTANDING</h1><p class="meta">${asOnDate ? 'As on: ' + fmtDate(asOnDate) : 'Current'} | Generated: ${printDate}</p></div>
+        <div class="legend">
+          <span><span class="dot green"></span>0-7 days</span>
+          <span><span class="dot yellow"></span>8-15 days (Caution)</span>
+          <span><span class="dot red"></span>15+ days (Overdue)</span>
+        </div>
         <table>
           <thead><tr><th>Name</th><th>Opening</th><th>Purchases</th><th>Discounts</th><th>Receipts</th><th>BF Disc</th><th>Adj</th><th>Balance</th></tr></thead>
           <tbody>
-            ${sortedLedger.map(d => `
-              <tr>
-                <td>${d.name}</td>
+            ${sortedLedger.map(d => {
+              const days = d.oldest_unpaid_days;
+              let rowClass = '';
+              let badge = '';
+              if (d.balance > 0 && days != null) {
+                if (days >= 999) { rowClass = 'aging-red'; badge = '<span class="aging-badge badge-red">B/F OVERDUE</span>'; }
+                else if (days > 15) { rowClass = 'aging-red'; badge = `<span class="aging-badge badge-red">${days}D OVERDUE</span>`; }
+                else if (days > 7) { rowClass = 'aging-yellow'; badge = `<span class="aging-badge badge-yellow">${days}D</span>`; }
+              }
+              return `
+              <tr class="${rowClass}">
+                <td>${d.name}${badge}</td>
                 <td>${d.opening.toLocaleString('en-IN')}</td>
                 <td>${d.purchases.toLocaleString('en-IN')}</td>
                 <td>${d.discounts.toLocaleString('en-IN')}</td>
@@ -2111,8 +2137,8 @@ const DukandarLedger = () => {
                 <td>${d.bf_disc > 0 ? d.bf_disc.toLocaleString('en-IN') : '-'}</td>
                 <td>${d.adjustments > 0 ? d.adjustments.toLocaleString('en-IN') : '-'}</td>
                 <td class="${d.balance >= 0 ? 'positive' : 'negative'}">${d.balance.toLocaleString('en-IN')}</td>
-              </tr>
-            `).join('')}
+              </tr>`;
+            }).join('')}
             <tr class="total-row">
               <td>TOTAL PATTI</td>
               <td>-</td>
