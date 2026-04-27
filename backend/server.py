@@ -999,6 +999,43 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         # Last transaction date (for aging/overdue tracking)
         all_dates = [s["date"] for s in d_sales] + [c["date"] for c in d_cash]
         last_txn_date = max(all_dates) if all_dates else None
+
+        # FIFO aging: compute oldest unpaid tranche days (matches Party Statement FIFO)
+        # Tranches = Opening (if >0) + each sale; Payments = receipts + BF_disc + adj_debit + writeoffs + discounts
+        from datetime import datetime as _dt
+        tranches = []
+        opening_bal = d.get("opening_balance", 0)
+        if opening_bal > 0:
+            tranches.append({"date": "Opening", "remaining": opening_bal})
+        for s in sorted(d_sales, key=lambda x: x["date"]):
+            tranches.append({"date": s["date"], "remaining": s.get("dukandar_amount") or s["gross_amount"]})
+        total_payments = receipts + bf_disc_standalone + adj_debit + adj_writeoff + discounts
+        remaining_pay = total_payments
+        for t in tranches:
+            if remaining_pay <= 0:
+                break
+            if remaining_pay >= t["remaining"]:
+                remaining_pay -= t["remaining"]
+                t["remaining"] = 0
+            else:
+                t["remaining"] -= remaining_pay
+                remaining_pay = 0
+        oldest_unpaid_days = None
+        oldest_unpaid_date = None
+        ref_today = as_on_date or datetime.utcnow().strftime("%Y-%m-%d")
+        for t in tranches:
+            if t["remaining"] > 0:
+                if t["date"] == "Opening":
+                    oldest_unpaid_days = 999
+                    oldest_unpaid_date = "Opening"
+                else:
+                    try:
+                        oldest_unpaid_days = (_dt.strptime(ref_today, "%Y-%m-%d") - _dt.strptime(t["date"], "%Y-%m-%d")).days
+                        oldest_unpaid_date = t["date"]
+                    except Exception:
+                        oldest_unpaid_days = 0
+                        oldest_unpaid_date = t["date"]
+                break
         
         ledger.append({
             "id": d["id"],
@@ -1013,7 +1050,9 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
             "adjustments": adj_debit,
             "writeoffs": adj_writeoff,
             "balance": balance,
-            "last_txn_date": last_txn_date
+            "last_txn_date": last_txn_date,
+            "oldest_unpaid_days": oldest_unpaid_days,
+            "oldest_unpaid_date": oldest_unpaid_date
         })
     
     return ledger

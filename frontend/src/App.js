@@ -2135,23 +2135,18 @@ const DukandarLedger = () => {
 
   if (loading) return <div className="loading">Loading...</div>;
 
-  // Aging helper
-  const today = new Date();
-  const getDaysOld = (dateStr) => {
-    if (!dateStr) return 999;
-    const d = new Date(dateStr);
-    return Math.floor((today - d) / (1000 * 60 * 60 * 24));
-  };
+  // Aging helper — uses FIFO-based oldest_unpaid_days from backend (matches Party Statement aging)
   const getAgingClass = (d) => {
-    if (d.balance <= 0 || !d.last_txn_date) return '';
-    const days = getDaysOld(d.last_txn_date);
+    if (d.balance <= 0 || d.oldest_unpaid_days == null) return '';
+    const days = d.oldest_unpaid_days;
     if (days > 15) return 'aging-red';
     if (days > 7) return 'aging-yellow';
     return '';
   };
   const getAgingLabel = (d) => {
-    if (d.balance <= 0 || !d.last_txn_date) return '';
-    const days = getDaysOld(d.last_txn_date);
+    if (d.balance <= 0 || d.oldest_unpaid_days == null) return '';
+    const days = d.oldest_unpaid_days;
+    if (days >= 999) return 'B/F overdue';
     if (days > 15) return `${days}d overdue`;
     if (days > 7) return `${days}d`;
     return '';
