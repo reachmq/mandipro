@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mandi-backend
+    runtime: python
+    rootDir: backend
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENV
+        value: production
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: mandi-accounting
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@mandi.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

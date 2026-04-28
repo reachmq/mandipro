@@ -110,8 +110,12 @@ async def login(request: Request):
         "name": user.get("name", ""),
         "role": user.get("role", "user")
     })
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    # Cookie security: in production (cross-origin Vercel→Render), browsers require SameSite=None + Secure
+    _is_prod = os.environ.get("ENV", "development").lower() == "production"
+    _cookie_samesite = "none" if _is_prod else "lax"
+    _cookie_secure = _is_prod
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=_cookie_secure, samesite=_cookie_samesite, max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=_cookie_secure, samesite=_cookie_samesite, max_age=604800, path="/")
     return response
 
 @api_router.get("/auth/me")
@@ -141,7 +145,8 @@ async def refresh_token(request: Request):
             raise HTTPException(status_code=401, detail="User not found")
         new_access = create_access_token(str(user["_id"]), user["email"])
         response = JSONResponse(content={"status": "refreshed"})
-        response.set_cookie(key="access_token", value=new_access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+        _is_prod = os.environ.get("ENV", "development").lower() == "production"
+        response.set_cookie(key="access_token", value=new_access, httponly=True, secure=_is_prod, samesite=("none" if _is_prod else "lax"), max_age=86400, path="/")
         return response
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -2139,7 +2144,21 @@ def formatCurrency_py(amount):
 
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
 app.include_router(api_router)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["https://commission-agent.preview.emergentagent.com", "http://localhost:3000"], allow_methods=["*"], allow_headers=["*"])
+
+# Read CORS origins from env (comma-separated). Defaults safe for local dev.
+_cors_env = os.environ.get("CORS_ORIGINS", "http://localhost:3000")
+if _cors_env.strip() == "*":
+    cors_origins = ["*"]
+else:
+    cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
