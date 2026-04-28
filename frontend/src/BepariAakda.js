@@ -12,7 +12,6 @@ const BepariAakda = () => {
   const [aakdaList, setAakdaList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedAakda, setSelectedAakda] = useState(null);
-  const [comment, setComment] = useState("");
   const printRef = useRef();
 
   const fetchAakda = async () => {
@@ -50,14 +49,14 @@ const BepariAakda = () => {
             .sales-table th:first-child, .sales-table td:first-child { text-align: left; }
             .sales-table th { background: #1B2A4A; color: white; font-size: 10px; text-transform: uppercase; }
             .sales-table .total-row td { border-top: 2px solid #C5A55A; background: rgba(197,165,90,0.08); font-weight: 700; }
+            .sale-comment-row td { background: #F4F2EC; font-style: italic; color: #475569; font-size: 11px; padding: 4px 8px; text-align: left; border-top: none; border-bottom: 1px solid #E2E0D8; }
+            .sale-comment-label { color: #C5A55A; font-weight: 700; font-style: normal; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; margin-right: 4px; }
             .summary-table { width: 100%; font-size: 13px; }
             .summary-table td { padding: 4px 0; }
             .summary-table td:last-child { text-align: right; font-weight: 500; }
             .total-row { border-top: 3px solid #C5A55A; font-weight: bold; font-size: 14px; }
             .closing-row { background: rgba(27,42,74,0.06); font-size: 16px; }
             .deduction { color: #991B1B; }
-            .aakda-comment-block { margin-top: 12px; padding: 10px 12px; background: rgba(197,165,90,0.12); border-left: 3px solid #C5A55A; font-size: 12px; color: #1B2A4A; }
-            .aakda-comment-block strong { color: #C5A55A; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
             .footer { text-align: center; margin-top: 15px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
           </style>
         </head>
@@ -170,24 +169,8 @@ const BepariAakda = () => {
         <div className="aakda-modal">
           <div className="aakda-modal-content">
             <div className="aakda-actions">
-              <button className="btn-clear" onClick={() => { setSelectedAakda(null); setComment(""); }}>Back to List</button>
+              <button className="btn-clear" onClick={() => setSelectedAakda(null)}>Back to List</button>
               <button className="btn-primary" onClick={handlePrint}>Print Aakda</button>
-            </div>
-
-            {/* Comment box (live editable; only renders in slip if non-empty) */}
-            <div className="aakda-comment-input" style={{ margin: '12px 0', padding: '10px', background: '#F9F8F6', border: '1px dashed #C5A55A', borderRadius: '6px' }}>
-              <label htmlFor="aakda-comment" style={{ display: 'block', fontSize: '12px', color: '#1B2A4A', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Comment (optional — only shows on slip if filled)
-              </label>
-              <input
-                id="aakda-comment"
-                data-testid="aakda-comment-input"
-                type="text"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="e.g., Paid full settlement / Carry forward to next week"
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #C5A55A', borderRadius: '4px', fontSize: '13px' }}
-              />
             </div>
 
             <div ref={printRef} className="aakda-slip-preview">
@@ -212,13 +195,25 @@ const BepariAakda = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedAakda.sales_detail || []).map((s, i) => (
-                      <tr key={i}>
-                        <td>{s.quantity}</td>
-                        <td>{formatCurrency(s.rate)}</td>
-                        <td>{formatCurrency(s.amount)}</td>
-                      </tr>
-                    ))}
+                    {(selectedAakda.sales_detail || []).flatMap((s, i) => {
+                      const rows = [
+                        <tr key={`r-${i}`}>
+                          <td>{s.quantity}</td>
+                          <td>{formatCurrency(s.rate)}</td>
+                          <td>{formatCurrency(s.amount)}</td>
+                        </tr>
+                      ];
+                      if (s.comment) {
+                        rows.push(
+                          <tr key={`c-${i}`} className="sale-comment-row">
+                            <td colSpan={3} className="sale-comment-cell">
+                              <span className="sale-comment-label">Note:</span> {s.comment}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows;
+                    })}
                     <tr className="total-row">
                       <td><strong>{selectedAakda.summary.quantity}</strong></td>
                       <td>—</td>
@@ -281,13 +276,6 @@ const BepariAakda = () => {
                     </tr>
                   </tbody>
                 </table>
-
-                {comment && comment.trim() && (
-                  <div className="aakda-comment-block" style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(197,165,90,0.1)', borderLeft: '3px solid #C5A55A', fontSize: '12px', color: '#1B2A4A' }}>
-                    <strong style={{ color: '#C5A55A', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>Comment</strong>
-                    {comment}
-                  </div>
-                )}
 
                 <div className="footer">
                   <p>Haji Mushtaq Nana & Sons | Mandi Accounting App</p>

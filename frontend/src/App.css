@@ -1044,6 +1044,28 @@ tr:hover {
   gap: 8px;
   justify-content: flex-end;
 }
+.mec-comment {
+  background: #F4F2EC;
+  border-left: 3px solid #C5A55A;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+}
+.mec-comment-label {
+  color: #C5A55A;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+.entry-form .comment-input {
+  min-width: 200px;
+  flex: 2;
+}
 .mec-badge {
   display: inline-block;
   font-size: 10px;
@@ -1789,6 +1811,11 @@ tr:hover {
 .aakda-slip .sales-table td {
   border: 1px solid #E2E0D8;
   padding: 5px;
+  text-align: right;
+}
+
+.aakda-slip .sales-table th:first-child,
+.aakda-slip .sales-table td:first-child {
   text-align: left;
 }
 
@@ -1798,6 +1825,33 @@ tr:hover {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.aakda-slip .sales-table .total-row td {
+  border-top: 2px solid #C5A55A;
+  background: rgba(197, 165, 90, 0.08);
+  font-weight: 700;
+}
+
+.aakda-slip .sale-comment-row td {
+  background: #F4F2EC;
+  font-style: italic;
+  color: #475569;
+  font-size: 10px;
+  padding: 4px 8px;
+  text-align: left;
+  border-top: none;
+  border-bottom: 1px solid #E2E0D8;
+}
+
+.aakda-slip .sale-comment-label {
+  color: #C5A55A;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: uppercase;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
 }
 
 .aakda-slip .summary-table {

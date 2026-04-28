@@ -432,7 +432,8 @@ async def create_daily_sale(data: DailySaleCreate, user: dict = Depends(get_curr
         discount=data.discount,
         net_amount=net,
         dukandar_rate=dukandar_rate,
-        dukandar_amount=dukandar_amount
+        dukandar_amount=dukandar_amount,
+        comment=(data.comment or "").strip() or None
     )
     doc = sale.model_dump()
     doc["created_at"] = datetime.utcnow().isoformat()
@@ -461,9 +462,9 @@ async def update_daily_sale(sale_id: str, data: dict, user: dict = Depends(get_c
     old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
     
-    for field in ["date", "quantity", "rate", "discount"]:
+    for field in ["date", "quantity", "rate", "discount", "comment"]:
         if field in data:
-            update_fields[field] = data[field]
+            update_fields[field] = (data[field].strip() or None) if field == "comment" and isinstance(data[field], str) else data[field]
     
     # Recalculate amounts if qty/rate/discount/dukandar_rate changed
     if "quantity" in data or "rate" in data or "discount" in data or "dukandar_rate" in data:
@@ -1696,7 +1697,8 @@ async def get_bepaari_aakda(date: str):
                 "amount": s["gross_amount"],
                 "discount": s["discount"],
                 "dukandar_rate": s.get("dukandar_rate"),
-                "dukandar_amount": duk_amt
+                "dukandar_amount": duk_amt,
+                "comment": s.get("comment")
             })
         
         aakda_list.append({

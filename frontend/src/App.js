@@ -429,7 +429,7 @@ const DailySales = () => {
   const [sales, setSales] = useState([]);
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
-  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "" });
+  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "", comment: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", bepaari_id: "", dukandar_id: "" });
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -457,8 +457,8 @@ const DailySales = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await axios.post(`${API}/daily-sales`, { ...form, quantity: parseInt(form.quantity), rate: parseFloat(form.rate), discount: parseFloat(form.discount || 0), dukandar_rate: form.dukandar_rate ? parseFloat(form.dukandar_rate) : null });
-    setForm({ ...form, bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "" });
+    await axios.post(`${API}/daily-sales`, { ...form, quantity: parseInt(form.quantity), rate: parseFloat(form.rate), discount: parseFloat(form.discount || 0), dukandar_rate: form.dukandar_rate ? parseFloat(form.dukandar_rate) : null, comment: form.comment ? form.comment.trim() : null });
+    setForm({ ...form, bepaari_id: "", dukandar_id: "", quantity: "", rate: "", discount: "0", dukandar_rate: "", comment: "" });
     fetchData();
   };
 
@@ -473,7 +473,8 @@ const DailySales = () => {
       quantity: sale.quantity,
       rate: sale.rate,
       discount: sale.discount || 0,
-      dukandar_rate: sale.dukandar_rate || ""
+      dukandar_rate: sale.dukandar_rate || "",
+      comment: sale.comment || ""
     });
   };
 
@@ -483,7 +484,8 @@ const DailySales = () => {
       quantity: parseInt(editForm.quantity),
       rate: parseFloat(editForm.rate),
       discount: parseFloat(editForm.discount || 0),
-      dukandar_rate: editForm.dukandar_rate ? parseFloat(editForm.dukandar_rate) : null
+      dukandar_rate: editForm.dukandar_rate ? parseFloat(editForm.dukandar_rate) : null,
+      comment: editForm.comment ? editForm.comment.trim() : null
     });
     setEditItem(null);
     fetchData();
@@ -518,6 +520,7 @@ const DailySales = () => {
         <input type="number" placeholder="Discount" value={form.discount === "0" ? "" : form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} onBlur={(e) => { if (!e.target.value) setForm({ ...form, discount: "0" }); }} />
         <span className="form-calc" data-testid="form-total">{form.quantity && form.rate ? `Total: ${formatCurrency(parseInt(form.quantity || 0) * parseFloat(form.rate || 0) - parseFloat(form.discount || 0))}` : ''}</span>
         <input type="number" placeholder="Duk. Rate (optional)" value={form.dukandar_rate} onChange={(e) => setForm({ ...form, dukandar_rate: e.target.value })} data-testid="dukandar-rate-input" title="Only fill if Dukandar rate differs from Bepaari rate" />
+        <input type="text" placeholder="Comment (optional - shows in Aakda)" value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} data-testid="comment-input" className="comment-input" title="Optional note for this sale - will appear under this line in the Bepaari Aakda slip" />
         <button type="submit" className="btn-primary">Add Sale</button>
       </form>
 
@@ -541,7 +544,7 @@ const DailySales = () => {
 
       <div className="table-container desktop-only">
         <table>
-          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Duk. Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Date</th><th>Bepaari</th><th>Dukandar</th><th>Qty</th><th>Rate</th><th>Duk. Rate</th><th>Gross</th><th>Disc</th><th>Net</th><th>Comment</th><th>Actions</th></tr></thead>
           <tbody>
             {sales.map((s) => (
               <tr key={s.id}>
@@ -549,6 +552,7 @@ const DailySales = () => {
                 <td>{formatCurrency(s.rate)}</td>
                 <td>{s.dukandar_rate ? formatCurrency(s.dukandar_rate) : "—"}</td>
                 <td>{formatCurrency(s.gross_amount)}</td><td>{formatCurrency(s.discount)}</td><td>{formatCurrency(s.net_amount)}</td>
+                <td className="comments-col" title={s.comment || ""}>{s.comment || "—"}</td>
                 <td>
                   <button className="btn-edit" onClick={() => handleEdit(s)}>Edit</button>
                   <button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button>
@@ -576,6 +580,11 @@ const DailySales = () => {
               {s.discount > 0 && <span>Disc: -{formatCurrency(s.discount)}</span>}
               {s.dukandar_rate && <span>Duk Rate: {formatCurrency(s.dukandar_rate)}</span>}
             </div>
+            {s.comment && (
+              <div className="mec-comment">
+                <span className="mec-comment-label">Note:</span> {s.comment}
+              </div>
+            )}
             <div className="mec-actions">
               <button className="btn-edit" onClick={() => handleEdit(s)}>Edit</button>
               <button className="btn-delete" onClick={() => handleDelete(s.id)}>X</button>
@@ -605,6 +614,7 @@ const DailySales = () => {
               <label>Rate:<input type="number" value={editForm.rate} onChange={(e) => setEditForm({ ...editForm, rate: e.target.value })} /></label>
               <label>Discount:<input type="number" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} /></label>
               <label>Duk. Rate:<input type="number" placeholder="Optional" value={editForm.dukandar_rate} onChange={(e) => setEditForm({ ...editForm, dukandar_rate: e.target.value })} /></label>
+              <label>Comment:<input type="text" placeholder="Optional - shows in Aakda" value={editForm.comment || ""} onChange={(e) => setEditForm({ ...editForm, comment: e.target.value })} /></label>
             </div>
             <div className="modal-actions">
               <button className="btn-clear" onClick={() => setEditItem(null)}>Cancel</button>
