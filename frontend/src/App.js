@@ -631,6 +631,8 @@ const DailySales = () => {
 const CashBook = () => {
   const [entries, setEntries] = useState([]);
   const [allEntries, setAllEntries] = useState([]); // Store all entries for client-side filtering
+  const [allUnfiltered, setAllUnfiltered] = useState([]); // ALL entries ignoring filter — for summary calc
+  const [settings, setSettings] = useState({ opening_cash: 0, opening_bank: 0 });
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "", subType: "", party: "", mode: "" });
@@ -658,12 +660,16 @@ const CashBook = () => {
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
       
-      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes] = await Promise.all([
+      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
-        axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`)
+        axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`),
+        axios.get(`${API}/cash-book`),  // ALL entries for summary calc
+        axios.get(`${API}/settings`)
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
+      setAllUnfiltered(allRes.data);
+      setSettings(settingsRes.data || { opening_cash: 0, opening_bank: 0 });
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
         ...dukandarsRes.data.map(p => ({ ...p, ptype: "DUKANDAR" })),
@@ -759,11 +765,80 @@ const CashBook = () => {
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
 
+  // ===== Live Cash & Bank summary (mirrors backend balance-sheet logic) =====
+  const summary = (() => {
+    const CASH_IN = ["RECEIPT", "TAKEN", "RECEIVED"];
+    const BANK_MODES = ["BANK", "UPI", "TRANSFER"];
+    const calcInOut = (es, modeFilter) => {
+      let inn = 0, out = 0;
+      es.forEach(c => {
+        const mode = c.mode || "CASH";
+        const isThisMode = modeFilter === "CASH" ? mode === "CASH" : BANK_MODES.includes(mode);
+        if (!isThisMode) return;
+        const inflow = CASH_IN.includes(c.sub_type);
+        const realAmt = (c.sub_type === "RECEIPT") ? (c.amount - (c.bf_disc || 0)) : c.amount;
+        if (inflow) inn += realAmt; else out += c.amount;
+      });
+      return { inn, out };
+    };
+
+    const fromDate = filters.fromDate;
+    const toDate = filters.toDate;
+    const before = fromDate ? allUnfiltered.filter(e => e.date < fromDate) : [];
+    const within = allUnfiltered.filter(e =>
+      (!fromDate || e.date >= fromDate) && (!toDate || e.date <= toDate)
+    );
+
+    // Cash
+    const cashBefore = calcInOut(before, "CASH");
+    const cashWithin = calcInOut(within, "CASH");
+    const cashOpening = (settings.opening_cash || 0) + cashBefore.inn - cashBefore.out;
+    const cashClosing = cashOpening + cashWithin.inn - cashWithin.out;
+
+    // Bank
+    const bankBefore = calcInOut(before, "BANK");
+    const bankWithin = calcInOut(within, "BANK");
+    const bankOpening = (settings.opening_bank || 0) + bankBefore.inn - bankBefore.out;
+    const bankClosing = bankOpening + bankWithin.inn - bankWithin.out;
+
+    return {
+      cash: { opening: cashOpening, in: cashWithin.inn, out: cashWithin.out, closing: cashClosing },
+      bank: { opening: bankOpening, in: bankWithin.inn, out: bankWithin.out, closing: bankClosing },
+      filtered: !!(fromDate || toDate)
+    };
+  })();
+
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
     <div className="page">
       <h2>Cash & Bank</h2>
+
+      {/* Live Summary Strip */}
+      <div className="cb-summary-strip" data-testid="cb-summary">
+        <div className="cb-summary-card cb-cash">
+          <div className="cbsc-header">
+            <span className="cbsc-icon">💵</span>
+            <span className="cbsc-title">CASH</span>
+            <span className="cbsc-period">{summary.filtered ? `${filters.fromDate || '…'} → ${filters.toDate || 'today'}` : 'All-time'}</span>
+          </div>
+          <div className="cbsc-row"><span>Opening</span><span className="cbsc-mono">{formatCurrency(summary.cash.opening)}</span></div>
+          <div className="cbsc-row cbsc-in"><span>+ Cash In</span><span className="cbsc-mono">{formatCurrency(summary.cash.in)}</span></div>
+          <div className="cbsc-row cbsc-out"><span>− Cash Out</span><span className="cbsc-mono">{formatCurrency(summary.cash.out)}</span></div>
+          <div className="cbsc-row cbsc-closing"><span>Closing</span><span className="cbsc-mono">{formatCurrency(summary.cash.closing)}</span></div>
+        </div>
+        <div className="cb-summary-card cb-bank">
+          <div className="cbsc-header">
+            <span className="cbsc-icon">🏦</span>
+            <span className="cbsc-title">BANK</span>
+            <span className="cbsc-period">{summary.filtered ? `${filters.fromDate || '…'} → ${filters.toDate || 'today'}` : 'All-time'}</span>
+          </div>
+          <div className="cbsc-row"><span>Opening</span><span className="cbsc-mono">{formatCurrency(summary.bank.opening)}</span></div>
+          <div className="cbsc-row cbsc-in"><span>+ Bank In</span><span className="cbsc-mono">{formatCurrency(summary.bank.in)}</span></div>
+          <div className="cbsc-row cbsc-out"><span>− Bank Out</span><span className="cbsc-mono">{formatCurrency(summary.bank.out)}</span></div>
+          <div className="cbsc-row cbsc-closing"><span>Closing</span><span className="cbsc-mono">{formatCurrency(summary.bank.closing)}</span></div>
+        </div>
+      </div>
       
       <form className="entry-form" onSubmit={handleSubmit}>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />

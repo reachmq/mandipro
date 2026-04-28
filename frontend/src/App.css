@@ -1062,6 +1062,79 @@ tr:hover {
   letter-spacing: 0.5px;
   margin-right: 4px;
 }
+/* ============== Cash & Bank Live Summary Cards ============== */
+.cb-summary-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.cb-summary-card {
+  background: #fff;
+  border: 1px solid #E2E0D8;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(27,42,74,0.05);
+}
+.cb-summary-card.cb-cash { border-left: 4px solid #C5A55A; }
+.cb-summary-card.cb-bank { border-left: 4px solid #1B2A4A; }
+.cbsc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #E2E0D8;
+}
+.cbsc-icon { font-size: 18px; }
+.cbsc-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #1B2A4A;
+  letter-spacing: 1.5px;
+}
+.cbsc-period {
+  margin-left: auto;
+  font-size: 10px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cbsc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #475569;
+  padding: 4px 0;
+}
+.cbsc-row.cbsc-in { color: #166534; }
+.cbsc-row.cbsc-out { color: #991B1B; }
+.cbsc-row.cbsc-closing {
+  border-top: 2px solid #C5A55A;
+  margin-top: 4px;
+  padding-top: 8px;
+  font-weight: 700;
+  color: #1B2A4A;
+  font-size: 14px;
+}
+.cbsc-mono {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .cb-summary-strip {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .cb-summary-card { padding: 12px 14px; }
+  .cbsc-row { font-size: 12px; }
+  .cbsc-row.cbsc-closing { font-size: 13px; }
+}
+
 .entry-form .comment-input {
   min-width: 200px;
   flex: 2;
