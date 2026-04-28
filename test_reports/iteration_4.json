@@ -1,0 +1,36 @@
+{
+  "summary": "Pre-deploy smoke test PASSED. All critical backend flows verified: auth (admin/operator), RBAC, Balance Sheet tally (diff=0), Bepaari Ledger structure & settings-driven rates, Dukandar Ledger FIFO oldest_unpaid_days (MUDASSIR=999 confirmed for B/F unpaid), per-sale comment round-trip (POST/PUT/GET + Aakda sales_detail), CREATE audit logging on daily_sales/cash_book/adjustments capturing user_email=admin@mandi.com (no longer hardcoded 'admin'), Settings PUT, Party Statement matching Ledger summary balance for 3 bepaaris. 28 passed, 1 skipped (no bepaari with flat_rate_per_goat seeded - non-blocking). All test data + audit-log rows cleaned up; final Balance Sheet still tallies (diff=0). Safe to deploy.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smoke_predeploy.py",
+    "/app/test_reports/pytest/pytest_smoke_predeploy.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 2168 lines - consider modular split (auth/ledger/aakda/balance-sheet) post-launch for maintainability. Not a blocker.",
+    "Older balance_transfer / pre-audit DELETE entries in activity_log show user='admin' (hardcoded legacy) - new entries correctly use user_email. Old entries are historical and can be left as-is.",
+    "balance_transfers has no DELETE endpoint - if a user mistakenly creates a transfer they cannot reverse it via UI/API; only via DB/admin. Consider adding DELETE with reverse-balance handling for production safety.",
+    "test_update_daily_sale_empty_comment_becomes_none confirmed comment empty/whitespace-string is correctly normalized to None in PUT path - matches POST behaviour."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_smoke_predeploy.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 executed; 1 skipped due to missing seed data)",
+    "frontend": "N/A (backend-only smoke per request)"
+  },
+  "test_credentials": "admin@mandi.com / mandi@2026 (admin); operator@mandi.com / oper@2026 (user/operator)",
+  "seed_data_creation": "Created and deleted: 1 daily_sale (date=2099-12-31, comment=__SMOKE_TEST__), 1 cash_book entry (BEPAARI/PAYMENT, ₹1, date=2099-12-31), 1 adjustment (DUKANDAR Dr → BEPAARI Cr, ₹1). All records + corresponding activity_log entries (matched on record_id) deleted in teardown. Verified zero residue: smoke daily_sales/cash_book/adjustments on 2099-12-31 = 0, activity_log SMOKE_TEST regex = 0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "App is production-ready. Pre-deploy smoke test file: /app/backend/tests/test_smoke_predeploy.py - reusable as regression suite. Key checks done: (1) Balance Sheet diff=0 at start, mid-test (with smoke data), and after teardown. (2) FIFO aging field oldest_unpaid_days returned for every dukandar; MUDASSIR has 999 since opening_balance>0 and balance>0 (B/F unpaid). (3) CREATE audit log captures user_email correctly for daily_sales, cash_book, adjustments. (4) Operator role correctly blocked from balance-sheet, export-all, activity-log, settings PUT. (5) Comment round-trips through POST → GET → PUT (whitespace→null) → Aakda sales_detail. (6) Party-statement closing_balance matches bepaari-ledger balance for 3 sampled bepaaris. Note: the test uses date 2099-12-31 to avoid touching today's aging/aakda for real users.",
+  "rca of the issue": "No issues found. All previously reported features (audit logging with user_email, FIFO aging, per-sale comment, settings-driven rates, Balance Sheet tally) verified working end-to-end."
+}
