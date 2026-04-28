@@ -642,7 +642,7 @@ const CashBook = () => {
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
   const subTypes = {
     BEPAARI: ["PAYMENT", "MOTOR", "BHUSSA", "GAWALI", "CASH_ADV"],
-    DUKANDAR: ["RECEIPT"],
+    DUKANDAR: ["RECEIPT", "REFUND"],
     CAPITAL: ["TAKEN", "REPAID", "WITHDRAWN"],
     LOAN: ["TAKEN", "REPAID"],
     AMANAT: ["TAKEN", "REPAID"],
@@ -1635,18 +1635,20 @@ const PartyStatement = () => {
         }
       });
       
-      // Add receipt entries
+      // Add receipt/refund entries
       // Receipt amount = full settlement (includes bf_disc portion)
       // bf_disc is NOT a separate credit — it's just tracking how much of the receipt was a discount
+      // REFUND = we paid dukandar back his credit; opposite of receipt → goes to debit
       statement.cash_entries.forEach(c => {
         const desc = c.bf_disc > 0
           ? `${c.sub_type} (${c.mode}) [incl. BF Disc ${formatCurrency(c.bf_disc)}]`
-          : `${c.sub_type} (${c.mode})`;
+          : `${c.sub_type} (${c.mode})${c.particulars ? ' - ' + c.particulars : ''}`;
+        const isRefund = c.sub_type === "REFUND";
         entries.push({
           date: c.date,
           description: desc,
-          debit: 0,
-          credit: c.amount,
+          debit: isRefund ? c.amount : 0,
+          credit: isRefund ? 0 : c.amount,
           type: 'cash'
         });
       });

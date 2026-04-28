@@ -1002,6 +1002,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         purchases = sum(s.get("dukandar_amount") or s["gross_amount"] for s in d_sales)
         discounts = sum(s["discount"] for s in d_sales)
         receipts = sum(c["amount"] for c in d_cash if c.get("sub_type") == "RECEIPT")
+        refunds = sum(c["amount"] for c in d_cash if c.get("sub_type") == "REFUND")
         # BF_DISC: Only from standalone BF_DISC entries reduces balance
         # bf_disc field in RECEIPT is for expense tracking only (Amount already settles full balance)
         bf_disc_standalone = sum(c["amount"] for c in d_cash if c.get("sub_type") == "BF_DISC")
@@ -1018,8 +1019,8 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
                           and a.get("debit_type") in expense_heads)
         
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
-        # Only standalone BF_DISC reduces balance, NOT bf_disc from RECEIPT (already in Amount)
-        balance = net_receivable - receipts - bf_disc_standalone - adj_debit - adj_writeoff
+        # Refund (we paid dukandar) ADDS to balance — opposite of receipt
+        balance = net_receivable - receipts + refunds - bf_disc_standalone - adj_debit - adj_writeoff
         
         # Last transaction date (for aging/overdue tracking)
         all_dates = [s["date"] for s in d_sales] + [c["date"] for c in d_cash]
