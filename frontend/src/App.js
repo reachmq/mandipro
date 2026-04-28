@@ -1182,7 +1182,7 @@ const Adjustments = () => {
         </select>
       </div>
 
-      <div className="table-container">
+      <div className="table-container desktop-only">
         <table>
           <thead>
             <tr>
@@ -1213,6 +1213,38 @@ const Adjustments = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="mobile-cards mobile-only">
+        {sortedAdjustments.map((a) => (
+          <div key={a.id} className="mobile-entry-card" data-testid="adj-card">
+            <div className="mec-header">
+              <span className="mec-date">{fmtDate(a.date)}</span>
+              <span className="mec-net">{formatCurrency(a.amount)}</span>
+            </div>
+            <div className="jv-leg">
+              <span className="badge debit">DEBIT · {a.debit_type}</span>
+              <strong>{a.debit_party_name}</strong>
+            </div>
+            <div className="jv-leg">
+              <span className="badge credit">CREDIT · {a.credit_type}</span>
+              <strong>{a.credit_party_name}</strong>
+            </div>
+            {a.narration && (
+              <div className="mec-comment">
+                <span className="mec-comment-label">Note:</span> {a.narration}
+              </div>
+            )}
+            <div className="mec-actions">
+              <button className="btn-edit" onClick={() => handleEdit(a)}>Edit</button>
+              <button className="btn-delete" onClick={() => handleDelete(a.id)}>X</button>
+            </div>
+          </div>
+        ))}
+        {adjustments.length === 0 && (
+          <div className="no-data">No adjustments recorded yet</div>
+        )}
       </div>
 
       {/* Edit Modal */}
@@ -1853,7 +1885,7 @@ const PartyStatement = () => {
             })()}
           </div>
 
-          <div className="ledger-table">
+          <div className="ledger-table desktop-only">
             <table>
               <thead>
                 <tr>
@@ -1895,12 +1927,48 @@ const PartyStatement = () => {
             </table>
           </div>
 
+          {/* Mobile statement cards */}
+          <div className="statement-mobile mobile-only">
+            <div className="stmt-mobile-row stmt-opening">
+              <div className="stmt-mobile-desc"><strong>Opening Balance</strong></div>
+              <div className="stmt-mobile-bal"><strong>{formatCurrency(statement.summary.opening_balance || 0)}</strong></div>
+            </div>
+            {ledgerEntries.map((e, i) => (
+              <div key={i} className={`stmt-mobile-row ${e.type === 'sale' ? 'stmt-sale' : e.type === 'adjustment' ? 'stmt-adj' : e.type === 'transfer' ? 'stmt-transfer' : ''}`}>
+                <div className="stmt-mobile-top">
+                  <span className="stmt-mobile-date">{fmtDate(e.date)}</span>
+                  <span className={`stmt-mobile-bal ${e.balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(e.balance)}</span>
+                </div>
+                <div className="stmt-mobile-desc">{e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — in opening)</span>}</div>
+                <div className="stmt-mobile-amounts">
+                  {e.debit > 0 && <span className="stmt-debit">{partyType === "bepaari" ? "Dr (-)" : "Dr (+)"} {formatCurrency(e.debit)}</span>}
+                  {e.credit > 0 && <span className="stmt-credit">{partyType === "bepaari" ? "Cr (+)" : "Cr (-)"} {formatCurrency(e.credit)}</span>}
+                </div>
+              </div>
+            ))}
+            <div className="stmt-mobile-row stmt-total">
+              <div className="stmt-mobile-top">
+                <span><strong>TOTAL</strong></span>
+              </div>
+              <div className="stmt-mobile-amounts">
+                <span className="stmt-debit">Dr {formatCurrency(totalDebit)}</span>
+                <span className="stmt-credit">Cr {formatCurrency(totalCredit)}</span>
+              </div>
+            </div>
+            <div className="stmt-mobile-row stmt-closing">
+              <div className="stmt-mobile-top">
+                <span><strong>{getClosingLabel()}</strong></span>
+                <span className="stmt-mobile-bal positive"><strong>{formatCurrency(Math.abs(closingBalance))}</strong></span>
+              </div>
+            </div>
+          </div>
+
           {/* Payment Aging (FIFO) — Dukandars only */}
           {agingData && agingData.length > 0 && partyType === "dukandar" && (
             <div className="aging-section" data-testid="payment-aging">
               <h3 className="aging-title">Payment Aging (FIFO)</h3>
               <p className="hint">Payments applied against oldest purchases first</p>
-              <table className="aging-table">
+              <table className="aging-table desktop-only">
                 <thead>
                   <tr>
                     <th>Purchase Date</th>
@@ -1928,6 +1996,20 @@ const PartyStatement = () => {
                   ))}
                 </tbody>
               </table>
+              {/* Mobile aging cards */}
+              <div className="aging-mobile mobile-only">
+                {agingData.map((t, i) => (
+                  <div key={i} className={`aging-mobile-card ${t.status === 'overdue' ? 'aging-row-overdue' : t.status === 'cleared' ? 'aging-row-cleared' : ''}`}>
+                    <div className="amc-top">
+                      <span><strong>{t.date === 'Opening' ? 'B/F Opening' : fmtDate(t.date)}</strong></span>
+                      <span className="amc-days">{t.days_old === 999 ? 'B/F' : `${t.days_old}d`}{t.status === 'overdue' ? ' OVERDUE' : ''}</span>
+                    </div>
+                    <div className="lmc-row"><span>Purchase</span><span>{formatCurrency(t.original)}</span></div>
+                    <div className="lmc-row"><span>Cleared</span><span className={t.remaining === 0 ? 'aging-full' : 'aging-partial'}>{formatCurrency(t.cleared)}{t.remaining === 0 ? ' ✅' : t.cleared > 0 ? ' (partial)' : ''}</span></div>
+                    <div className="lmc-row"><span>Remaining</span><span className={t.remaining > 0 ? 'aging-unpaid' : ''}>{formatCurrency(t.remaining)}</span></div>
+                  </div>
+                ))}
+              </div>
               <div className="aging-footer">
                 <span>Overdue: <strong className="aging-unpaid">{formatCurrency(agingData.filter(t => t.status === 'overdue').reduce((s, t) => s + t.remaining, 0))}</strong></span>
                 <span>Within limit: <strong>{formatCurrency(agingData.filter(t => t.status === 'within_limit').reduce((s, t) => s + t.remaining, 0))}</strong></span>
@@ -2039,7 +2121,7 @@ const BepariLedger = () => {
           <option value="balance-asc">Balance (Low-High)</option>
         </select>
       </div>
-      <div className="table-container">
+      <div className="table-container desktop-only">
         <table>
           <thead><tr>
             <th className="sortable" onClick={() => setSortBy(sortBy === "name-asc" ? "name-desc" : "name-asc")}>Name {sortBy.startsWith("name") ? (sortBy === "name-asc" ? "↑" : "↓") : ""}</th>
@@ -2064,6 +2146,36 @@ const BepariLedger = () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="mobile-cards mobile-only">
+        {sortedLedger.map((b) => (
+          <div key={b.id} className="ledger-mobile-card" onClick={() => navigate(`/party-statement?type=bepaari&id=${b.id}`)} data-testid="bep-ledger-card">
+            <div className="lmc-header">
+              <div className="lmc-name">{b.name}</div>
+              <div className={`lmc-balance ${b.balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(b.balance)}</div>
+            </div>
+            <div className="lmc-body">
+              <div className="lmc-row"><span>Opening</span><span>{formatCurrency(b.opening)}</span></div>
+              <div className="lmc-row"><span>Sales ({b.quantity} pcs)</span><span>{formatCurrency(b.gross_sales)}</span></div>
+              <div className="lmc-row"><span>Deductions</span><span>-{formatCurrency(b.total_deductions)}</span></div>
+              <div className="lmc-row"><span>Payments</span><span>-{formatCurrency(b.payments)}</span></div>
+              {b.adjustments > 0 && <div className="lmc-row"><span>Adjustments</span><span>-{formatCurrency(b.adjustments)}</span></div>}
+            </div>
+          </div>
+        ))}
+        <div className="ledger-mobile-card lmc-total">
+          <div className="lmc-header">
+            <div className="lmc-name">TOTAL</div>
+            <div className={`lmc-balance ${totals.bal >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(totals.bal)}</div>
+          </div>
+          <div className="lmc-body">
+            <div className="lmc-row"><span>Sales ({totals.qty} pcs)</span><span>{formatCurrency(totals.gross)}</span></div>
+            <div className="lmc-row"><span>Deductions</span><span>-{formatCurrency(totals.ded)}</span></div>
+            <div className="lmc-row"><span>Payments</span><span>-{formatCurrency(totals.pay)}</span></div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2222,7 +2334,7 @@ const DukandarLedger = () => {
         <span className="aging-legend-item"><span className="aging-dot yellow"></span> 8-15 days (Caution)</span>
         <span className="aging-legend-item"><span className="aging-dot red"></span> 15+ days (Overdue)</span>
       </div>
-      <div className="table-container">
+      <div className="table-container desktop-only">
         <table>
           <thead><tr>
             <th className="sortable" onClick={() => setSortBy(sortBy === "name-asc" ? "name-desc" : "name-asc")}>Name {sortBy.startsWith("name") ? (sortBy === "name-asc" ? "↑" : "↓") : ""}</th>
@@ -2247,6 +2359,39 @@ const DukandarLedger = () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="mobile-cards mobile-only">
+        {sortedLedger.map((d) => (
+          <div key={d.id} className={`ledger-mobile-card ${getAgingClass(d)}`} onClick={() => navigate(`/party-statement?type=dukandar&id=${d.id}`)} data-testid="duk-ledger-card">
+            <div className="lmc-header">
+              <div className="lmc-name">
+                {d.name}
+                {getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}
+              </div>
+              <div className={`lmc-balance ${d.balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(d.balance)}</div>
+            </div>
+            <div className="lmc-body">
+              <div className="lmc-row"><span>Opening</span><span>{formatCurrency(d.opening)}</span></div>
+              <div className="lmc-row"><span>Purchases</span><span>{formatCurrency(d.purchases)}</span></div>
+              {d.discounts > 0 && <div className="lmc-row"><span>Discounts</span><span>-{formatCurrency(d.discounts)}</span></div>}
+              <div className="lmc-row"><span>Receipts</span><span>-{formatCurrency(d.receipts)}</span></div>
+              {d.bf_disc > 0 && <div className="lmc-row"><span>BF Disc</span><span>-{formatCurrency(d.bf_disc)}</span></div>}
+              {d.adjustments > 0 && <div className="lmc-row"><span>Adjustments</span><span>-{formatCurrency(d.adjustments)}</span></div>}
+            </div>
+          </div>
+        ))}
+        <div className="ledger-mobile-card lmc-total">
+          <div className="lmc-header">
+            <div className="lmc-name">TOTAL</div>
+            <div className={`lmc-balance ${totals.balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(totals.balance)}</div>
+          </div>
+          <div className="lmc-body">
+            <div className="lmc-row"><span>Purchases</span><span>{formatCurrency(totals.purchases)}</span></div>
+            <div className="lmc-row"><span>Receipts</span><span>-{formatCurrency(totals.receipts)}</span></div>
+          </div>
+        </div>
       </div>
     </div>
   );

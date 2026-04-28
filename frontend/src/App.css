@@ -1066,6 +1066,145 @@ tr:hover {
   min-width: 200px;
   flex: 2;
 }
+
+/* ============== Mobile Ledger Cards (Bepaari/Dukandar) ============== */
+.ledger-mobile-card {
+  background: #fff;
+  border: 1px solid #E2E0D8;
+  border-left: 4px solid #C5A55A;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.ledger-mobile-card:hover { box-shadow: 0 2px 8px rgba(27,42,74,0.08); }
+.ledger-mobile-card.aging-yellow { border-left-color: #F59E0B; background: #FFFBEB; }
+.ledger-mobile-card.aging-red { border-left-color: #991B1B; background: #FEF2F2; }
+.ledger-mobile-card.lmc-total { border-left-color: #1B2A4A; background: rgba(197,165,90,0.08); cursor: default; }
+.lmc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #E2E0D8;
+}
+.lmc-name {
+  font-weight: 700;
+  color: #1B2A4A;
+  font-size: 14px;
+  flex: 1;
+}
+.lmc-name .aging-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #991B1B;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.lmc-balance {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.lmc-balance.positive { color: #166534; }
+.lmc-balance.negative { color: #991B1B; }
+.lmc-body { display: flex; flex-direction: column; gap: 4px; }
+.lmc-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475569;
+}
+.lmc-row span:last-child { font-weight: 500; color: #1B2A4A; }
+
+/* JV Mobile leg row */
+.jv-leg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #1B2A4A;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.jv-leg .badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.jv-leg .badge.debit { background: #991B1B; color: #fff; }
+.jv-leg .badge.credit { background: #166534; color: #fff; }
+
+/* ============== Mobile Party Statement ============== */
+.statement-mobile { display: flex; flex-direction: column; gap: 8px; }
+.stmt-mobile-row {
+  background: #fff;
+  border: 1px solid #E2E0D8;
+  border-left: 3px solid #C5A55A;
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.stmt-mobile-row.stmt-sale { border-left-color: #166534; }
+.stmt-mobile-row.stmt-adj { border-left-color: #C5A55A; background: #FFFBEB; }
+.stmt-mobile-row.stmt-transfer { border-left-color: #94a3b8; background: #F4F2EC; opacity: 0.85; }
+.stmt-mobile-row.stmt-opening { background: rgba(27,42,74,0.05); }
+.stmt-mobile-row.stmt-total { border-left-color: #1B2A4A; background: rgba(197,165,90,0.08); }
+.stmt-mobile-row.stmt-closing { border-left-color: #1B2A4A; background: #1B2A4A; color: #fff; }
+.stmt-mobile-row.stmt-closing strong { color: #fff; }
+.stmt-mobile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.stmt-mobile-date { font-size: 11px; color: #475569; font-weight: 600; }
+.stmt-mobile-bal { font-weight: 700; font-size: 13px; }
+.stmt-mobile-bal.positive { color: #166534; }
+.stmt-mobile-bal.negative { color: #991B1B; }
+.stmt-mobile-row.stmt-closing .stmt-mobile-bal.positive { color: #C5A55A; }
+.stmt-mobile-desc {
+  font-size: 12px;
+  color: #1B2A4A;
+  margin-bottom: 4px;
+}
+.stmt-mobile-amounts {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.stmt-debit { color: #991B1B; }
+.stmt-credit { color: #166534; }
+
+/* ============== Mobile Aging Cards ============== */
+.aging-mobile { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.aging-mobile-card {
+  background: #fff;
+  border: 1px solid #E2E0D8;
+  border-left: 3px solid #C5A55A;
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.aging-mobile-card.aging-row-overdue { border-left-color: #991B1B; background: #FEF2F2; }
+.aging-mobile-card.aging-row-cleared { opacity: 0.6; border-left-color: #166534; }
+.amc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #E2E0D8;
+  font-size: 12px;
+}
+.amc-days { color: #991B1B; font-weight: 700; font-size: 11px; }
 .mec-badge {
   display: inline-block;
   font-size: 10px;
@@ -1177,6 +1316,20 @@ tr:hover {
     gap: 8px;
     padding: 10px;
   }
+  .filter-bar > input,
+  .filter-bar > select,
+  .filter-bar > button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+  .filter-bar > label {
+    flex: 0 0 auto;
+    font-size: 12px;
+  }
+  .filter-bar .ss-container {
+    flex: 1 1 100%;
+  }
+  .statement-mobile, .aging-mobile { display: flex !important; }
   .table-container {
     overflow-x: auto;
   }
