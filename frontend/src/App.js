@@ -2614,13 +2614,13 @@ const ActivityLog = () => {
 
   useEffect(() => { fetchLogs(); }, [filter]);
 
-  const collectionLabels = { daily_sales: "Daily Sales", cash_book: "Cash & Bank", adjustments: "Adjustments" };
-  const actionColors = { EDIT: "#C5A55A", DELETE: "#991B1B" };
+  const collectionLabels = { daily_sales: "Daily Sales", cash_book: "Cash & Bank", adjustments: "Adjustments", balance_transfers: "Balance Transfer" };
+  const actionColors = { CREATE: "#166534", EDIT: "#C5A55A", DELETE: "#991B1B" };
 
   return (
     <div className="page">
       <h2>Activity Log</h2>
-      <p className="hint">Audit trail of all edits and deletes across the system</p>
+      <p className="hint">Audit trail of all creates, edits and deletes across the system</p>
 
       <div className="filter-bar">
         <select value={filter.collection} onChange={(e) => setFilter({ ...filter, collection: e.target.value })}>
@@ -2628,9 +2628,11 @@ const ActivityLog = () => {
           <option value="daily_sales">Daily Sales</option>
           <option value="cash_book">Cash & Bank</option>
           <option value="adjustments">Adjustments</option>
+          <option value="balance_transfers">Balance Transfers</option>
         </select>
         <select value={filter.action} onChange={(e) => setFilter({ ...filter, action: e.target.value })}>
           <option value="">All Actions</option>
+          <option value="CREATE">Creates Only</option>
           <option value="EDIT">Edits Only</option>
           <option value="DELETE">Deletes Only</option>
         </select>
@@ -2640,7 +2642,7 @@ const ActivityLog = () => {
 
       {loading ? <div className="loading">Loading...</div> : (
         <div className="activity-log-list">
-          {logs.length === 0 && <div className="no-data">No activity logged yet. Edits and deletes will appear here.</div>}
+          {logs.length === 0 && <div className="no-data">No activity logged yet. Creates, edits and deletes will appear here.</div>}
           {logs.map((log) => (
             <div key={log.id} className="log-card" data-testid="log-entry">
               <div className="log-header">
@@ -2663,6 +2665,8 @@ const ActivityLog = () => {
                           <span className="log-arrow">&rarr;</span>
                           <span className="log-new">{c.new || '(empty)'}</span>
                         </>
+                      ) : log.action === "CREATE" ? (
+                        <span className="log-new">{c.new}</span>
                       ) : (
                         <span className="log-old">{c.old}</span>
                       )}

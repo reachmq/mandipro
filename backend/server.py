@@ -200,8 +200,8 @@ def serialize_docs(docs):
     return [serialize_doc(d) for d in docs]
 
 
-async def log_activity(collection: str, record_id: str, action: str, old_values: dict, new_values: dict = None, summary: str = ""):
-    """Log edit/delete activity for audit trail"""
+async def log_activity(collection: str, record_id: str, action: str, old_values: dict, new_values: dict = None, summary: str = "", user_email: str = "system"):
+    """Log create/edit/delete activity for audit trail"""
     # Build changes list
     changes = []
     if action == "EDIT" and new_values:
@@ -211,6 +211,9 @@ async def log_activity(collection: str, record_id: str, action: str, old_values:
                 changes.append({"field": key, "old": str(old_val), "new": str(new_val)})
     elif action == "DELETE":
         changes = [{"field": k, "old": str(v), "new": ""} for k, v in old_values.items() if k not in ("_id", "created_at")]
+    elif action == "CREATE" and new_values:
+        # For CREATE, capture all field values as the "new" state
+        changes = [{"field": k, "old": "", "new": str(v)} for k, v in new_values.items() if k not in ("_id", "created_at", "id")]
 
     log_entry = {
         "id": str(uuid.uuid4()),
@@ -219,7 +222,7 @@ async def log_activity(collection: str, record_id: str, action: str, old_values:
         "action": action,
         "summary": summary,
         "changes": changes,
-        "user": "admin",
+        "user": user_email,
         "timestamp": datetime.utcnow().isoformat()
     }
     await db.activity_log.insert_one(log_entry)
@@ -404,7 +407,7 @@ async def get_daily_sales(
     return serialize_docs(sales)
 
 @api_router.post("/daily-sales")
-async def create_daily_sale(data: DailySaleCreate):
+async def create_daily_sale(data: DailySaleCreate, user: dict = Depends(get_current_user)):
     bepaari = await db.bepaaris.find_one({"id": data.bepaari_id})
     dukandar = await db.dukandars.find_one({"id": data.dukandar_id})
     
@@ -433,20 +436,27 @@ async def create_daily_sale(data: DailySaleCreate):
     )
     doc = sale.model_dump()
     doc["created_at"] = datetime.utcnow().isoformat()
+    doc["created_by"] = user.get("email", "unknown")
     await db.daily_sales.insert_one(doc)
+    await log_activity(
+        "daily_sales", doc["id"], "CREATE", {}, serialize_doc(dict(doc)),
+        summary=f"Sale: {bepaari['name']} → {dukandar['name']} | {data.quantity} pcs @ ₹{data.rate} = ₹{gross}",
+        user_email=user.get("email", "unknown")
+    )
     return serialize_doc(doc)
 
 @api_router.delete("/daily-sales/{sale_id}")
-async def delete_daily_sale(sale_id: str):
+async def delete_daily_sale(sale_id: str, user: dict = Depends(get_current_user)):
     old = await db.daily_sales.find_one({"id": sale_id})
     if old:
         await log_activity("daily_sales", sale_id, "DELETE", serialize_doc(dict(old)),
-            summary=f"Deleted sale: {old.get('bepaari_name','')} → {old.get('dukandar_name','')}, {old.get('quantity',0)} pcs, {old.get('gross_amount',0)}")
+            summary=f"Deleted sale: {old.get('bepaari_name','')} → {old.get('dukandar_name','')}, {old.get('quantity',0)} pcs, {old.get('gross_amount',0)}",
+            user_email=user.get("email", "unknown"))
     await db.daily_sales.delete_one({"id": sale_id})
     return {"status": "deleted"}
 
 @api_router.put("/daily-sales/{sale_id}")
-async def update_daily_sale(sale_id: str, data: dict):
+async def update_daily_sale(sale_id: str, data: dict, user: dict = Depends(get_current_user)):
     old_doc = await db.daily_sales.find_one({"id": sale_id})
     old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
@@ -488,7 +498,8 @@ async def update_daily_sale(sale_id: str, data: dict):
     
     await db.daily_sales.update_one({"id": sale_id}, {"$set": update_fields})
     await log_activity("daily_sales", sale_id, "EDIT", old_snap, update_fields,
-        summary=f"Edited sale: {old_snap.get('bepaari_name','')} → {old_snap.get('dukandar_name','')}")
+        summary=f"Edited sale: {old_snap.get('bepaari_name','')} → {old_snap.get('dukandar_name','')}",
+        user_email=user.get("email", "unknown"))
     return {"status": "updated"}
 
 
@@ -523,7 +534,7 @@ async def get_cash_book(
     return serialize_docs(entries)
 
 @api_router.post("/cash-book")
-async def create_cash_book_entry(data: CashBookEntryCreate):
+async def create_cash_book_entry(data: CashBookEntryCreate, user: dict = Depends(get_current_user)):
     party_name = None
     if data.party_id:
         for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
@@ -545,20 +556,27 @@ async def create_cash_book_entry(data: CashBookEntryCreate):
     )
     doc = entry.model_dump()
     doc["created_at"] = datetime.utcnow().isoformat()
+    doc["created_by"] = user.get("email", "unknown")
     await db.cash_book.insert_one(doc)
+    await log_activity(
+        "cash_book", doc["id"], "CREATE", {}, serialize_doc(dict(doc)),
+        summary=f"Cash: {data.type} {data.sub_type} {party_name or ''} ₹{data.amount} ({data.mode})",
+        user_email=user.get("email", "unknown")
+    )
     return serialize_doc(doc)
 
 @api_router.delete("/cash-book/{entry_id}")
-async def delete_cash_book_entry(entry_id: str):
+async def delete_cash_book_entry(entry_id: str, user: dict = Depends(get_current_user)):
     old = await db.cash_book.find_one({"id": entry_id})
     if old:
         await log_activity("cash_book", entry_id, "DELETE", serialize_doc(dict(old)),
-            summary=f"Deleted: {old.get('type','')} {old.get('sub_type','')} {old.get('party_name','')} {old.get('amount',0)}")
+            summary=f"Deleted: {old.get('type','')} {old.get('sub_type','')} {old.get('party_name','')} {old.get('amount',0)}",
+            user_email=user.get("email", "unknown"))
     await db.cash_book.delete_one({"id": entry_id})
     return {"status": "deleted"}
 
 @api_router.put("/cash-book/{entry_id}")
-async def update_cash_book_entry(entry_id: str, data: dict):
+async def update_cash_book_entry(entry_id: str, data: dict, user: dict = Depends(get_current_user)):
     old_doc = await db.cash_book.find_one({"id": entry_id})
     old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
     update_fields = {}
@@ -576,7 +594,8 @@ async def update_cash_book_entry(entry_id: str, data: dict):
     
     await db.cash_book.update_one({"id": entry_id}, {"$set": update_fields})
     await log_activity("cash_book", entry_id, "EDIT", old_snap, update_fields,
-        summary=f"Edited: {old_snap.get('type','')} {old_snap.get('sub_type','')} {old_snap.get('party_name','')}")
+        summary=f"Edited: {old_snap.get('type','')} {old_snap.get('sub_type','')} {old_snap.get('party_name','')}",
+        user_email=user.get("email", "unknown"))
     return {"status": "updated"}
 
 
@@ -1257,7 +1276,7 @@ async def get_adjustments(
 
 
 @api_router.post("/adjustments")
-async def create_adjustment(data: AdjustmentEntryCreate):
+async def create_adjustment(data: AdjustmentEntryCreate, user: dict = Depends(get_current_user)):
     """Create a new adjustment/JV entry"""
     EXPENSE_HEADS = {
         "MANDI_EXPENSE": {"id": "__MANDI_EXPENSE__", "name": "Mandi Expense"},
@@ -1309,22 +1328,29 @@ async def create_adjustment(data: AdjustmentEntryCreate):
     
     doc = adjustment.model_dump()
     doc["created_at"] = datetime.utcnow().isoformat()
+    doc["created_by"] = user.get("email", "unknown")
     await db.adjustments.insert_one(doc)
+    await log_activity(
+        "adjustments", doc["id"], "CREATE", {}, serialize_doc(dict(doc)),
+        summary=f"JV: Dr {debit_party_name} → Cr {credit_party_name} ₹{data.amount}",
+        user_email=user.get("email", "unknown")
+    )
     return serialize_doc(doc)
 
 
 @api_router.delete("/adjustments/{adjustment_id}")
-async def delete_adjustment(adjustment_id: str):
+async def delete_adjustment(adjustment_id: str, user: dict = Depends(get_current_user)):
     """Delete an adjustment entry"""
     old = await db.adjustments.find_one({"id": adjustment_id})
     if old:
         await log_activity("adjustments", adjustment_id, "DELETE", serialize_doc(dict(old)),
-            summary=f"Deleted JV: {old.get('debit_party_name','')} → {old.get('credit_party_name','')} {old.get('amount',0)}")
+            summary=f"Deleted JV: {old.get('debit_party_name','')} → {old.get('credit_party_name','')} {old.get('amount',0)}",
+            user_email=user.get("email", "unknown"))
     await db.adjustments.delete_one({"id": adjustment_id})
     return {"status": "deleted"}
 
 @api_router.put("/adjustments/{adjustment_id}")
-async def update_adjustment(adjustment_id: str, data: dict):
+async def update_adjustment(adjustment_id: str, data: dict, user: dict = Depends(get_current_user)):
     """Update an adjustment entry"""
     old_doc = await db.adjustments.find_one({"id": adjustment_id})
     old_snap = serialize_doc(dict(old_doc)) if old_doc else {}
@@ -1354,13 +1380,14 @@ async def update_adjustment(adjustment_id: str, data: dict):
     
     await db.adjustments.update_one({"id": adjustment_id}, {"$set": update_fields})
     await log_activity("adjustments", adjustment_id, "EDIT", old_snap, update_fields,
-        summary=f"Edited JV: {old_snap.get('debit_party_name','')} → {old_snap.get('credit_party_name','')}")
+        summary=f"Edited JV: {old_snap.get('debit_party_name','')} → {old_snap.get('credit_party_name','')}",
+        user_email=user.get("email", "unknown"))
     return {"status": "updated"}
 
 
 # ============== BALANCE TRANSFER ==============
 @api_router.post("/balance-transfer")
-async def transfer_balance(data: dict):
+async def transfer_balance(data: dict, user: dict = Depends(get_current_user)):
     """Transfer balance from one party to another (corrects opening balances)"""
     from_type = data.get("from_type")  # BEPAARI, DUKANDAR, etc.
     from_party_id = data.get("from_party_id")
@@ -1438,9 +1465,15 @@ async def transfer_balance(data: dict):
         "to_party_name": to_name,
         "amount": amount,
         "narration": narration,
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat(),
+        "created_by": user.get("email", "unknown")
     }
     await db.balance_transfers.insert_one(transfer_record)
+    await log_activity(
+        "balance_transfers", transfer_record["id"], "CREATE", {}, serialize_doc(dict(transfer_record)),
+        summary=f"Balance Transfer: {from_party.get('name')} → {to_name} ₹{amount}",
+        user_email=user.get("email", "unknown")
+    )
     
     return {
         "status": "transferred",
