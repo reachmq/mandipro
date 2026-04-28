@@ -766,6 +766,9 @@ const CashBook = () => {
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
 
   // ===== Live Cash & Bank summary (mirrors backend balance-sheet logic) =====
+  const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
+  const [summaryMode, setSummaryMode] = useState("daily"); // 'daily' | 'all-time'
+
   const summary = (() => {
     const CASH_IN = ["RECEIPT", "TAKEN", "RECEIVED"];
     const BANK_MODES = ["BANK", "UPI", "TRANSFER"];
@@ -782,12 +785,15 @@ const CashBook = () => {
       return { inn, out };
     };
 
-    const fromDate = filters.fromDate;
-    const toDate = filters.toDate;
-    const before = fromDate ? allUnfiltered.filter(e => e.date < fromDate) : [];
-    const within = allUnfiltered.filter(e =>
-      (!fromDate || e.date >= fromDate) && (!toDate || e.date <= toDate)
-    );
+    let before = [];
+    let within = [];
+    if (summaryMode === "daily") {
+      before = allUnfiltered.filter(e => e.date < summaryDate);
+      within = allUnfiltered.filter(e => e.date === summaryDate);
+    } else {
+      // all-time
+      within = allUnfiltered;
+    }
 
     // Cash
     const cashBefore = calcInOut(before, "CASH");
@@ -803,24 +809,47 @@ const CashBook = () => {
 
     return {
       cash: { opening: cashOpening, in: cashWithin.inn, out: cashWithin.out, closing: cashClosing },
-      bank: { opening: bankOpening, in: bankWithin.inn, out: bankWithin.out, closing: bankClosing },
-      filtered: !!(fromDate || toDate)
+      bank: { opening: bankOpening, in: bankWithin.inn, out: bankWithin.out, closing: bankClosing }
     };
   })();
 
   if (loading) return <div className="loading">Loading...</div>;
 
+  const cardLabel = summaryMode === "all-time" ? "ALL-TIME" : `As on ${fmtDate(summaryDate)}`;
+
   return (
     <div className="page">
       <h2>Cash & Bank</h2>
 
-      {/* Live Summary Strip */}
+      {/* Live Summary Strip with date picker */}
+      <div className="cb-summary-controls">
+        <div className="cb-summary-tabs">
+          <button
+            className={`cbst-btn ${summaryMode === 'daily' ? 'active' : ''}`}
+            onClick={() => setSummaryMode('daily')}
+            data-testid="cbst-daily">Daily</button>
+          <button
+            className={`cbst-btn ${summaryMode === 'all-time' ? 'active' : ''}`}
+            onClick={() => setSummaryMode('all-time')}
+            data-testid="cbst-alltime">All-Time</button>
+        </div>
+        {summaryMode === 'daily' && (
+          <input
+            type="date"
+            value={summaryDate}
+            onChange={(e) => setSummaryDate(e.target.value)}
+            className="cb-summary-date"
+            data-testid="cb-summary-date"
+          />
+        )}
+      </div>
+
       <div className="cb-summary-strip" data-testid="cb-summary">
         <div className="cb-summary-card cb-cash">
           <div className="cbsc-header">
             <span className="cbsc-icon">💵</span>
             <span className="cbsc-title">CASH</span>
-            <span className="cbsc-period">{summary.filtered ? `${filters.fromDate || '…'} → ${filters.toDate || 'today'}` : 'All-time'}</span>
+            <span className="cbsc-period">{cardLabel}</span>
           </div>
           <div className="cbsc-row"><span>Opening</span><span className="cbsc-mono">{formatCurrency(summary.cash.opening)}</span></div>
           <div className="cbsc-row cbsc-in"><span>+ Cash In</span><span className="cbsc-mono">{formatCurrency(summary.cash.in)}</span></div>
@@ -831,7 +860,7 @@ const CashBook = () => {
           <div className="cbsc-header">
             <span className="cbsc-icon">🏦</span>
             <span className="cbsc-title">BANK</span>
-            <span className="cbsc-period">{summary.filtered ? `${filters.fromDate || '…'} → ${filters.toDate || 'today'}` : 'All-time'}</span>
+            <span className="cbsc-period">{cardLabel}</span>
           </div>
           <div className="cbsc-row"><span>Opening</span><span className="cbsc-mono">{formatCurrency(summary.bank.opening)}</span></div>
           <div className="cbsc-row cbsc-in"><span>+ Bank In</span><span className="cbsc-mono">{formatCurrency(summary.bank.in)}</span></div>
