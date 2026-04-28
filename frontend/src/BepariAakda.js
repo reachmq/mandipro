@@ -12,6 +12,7 @@ const BepariAakda = () => {
   const [aakdaList, setAakdaList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedAakda, setSelectedAakda] = useState(null);
+  const [comment, setComment] = useState("");
   const printRef = useRef();
 
   const fetchAakda = async () => {
@@ -37,7 +38,7 @@ const BepariAakda = () => {
           <title>Bepaari Aakda - ${selectedAakda.bepaari_name}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
-            body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 20px; }
+            body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .aakda-slip { border: 2px solid #1B2A4A; padding: 20px; max-width: 420px; margin: 0 auto; }
             .header { text-align: center; border-bottom: 3px solid #C5A55A; padding-bottom: 10px; margin-bottom: 15px; }
             .header h2 { margin: 0; font-size: 18px; font-family: 'Cormorant Garamond', Georgia, serif; color: #1B2A4A; }
@@ -45,14 +46,18 @@ const BepariAakda = () => {
             .header p { margin: 3px 0; font-size: 11px; color: #475569; }
             .party-info { font-size: 16px; font-weight: bold; color: #1B2A4A; margin-bottom: 15px; }
             .sales-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .sales-table th, .sales-table td { border: 1px solid #E2E0D8; padding: 5px; text-align: left; }
+            .sales-table th, .sales-table td { border: 1px solid #E2E0D8; padding: 5px; text-align: right; }
+            .sales-table th:first-child, .sales-table td:first-child { text-align: left; }
             .sales-table th { background: #1B2A4A; color: white; font-size: 10px; text-transform: uppercase; }
+            .sales-table .total-row td { border-top: 2px solid #C5A55A; background: rgba(197,165,90,0.08); font-weight: 700; }
             .summary-table { width: 100%; font-size: 13px; }
             .summary-table td { padding: 4px 0; }
             .summary-table td:last-child { text-align: right; font-weight: 500; }
             .total-row { border-top: 3px solid #C5A55A; font-weight: bold; font-size: 14px; }
             .closing-row { background: rgba(27,42,74,0.06); font-size: 16px; }
             .deduction { color: #991B1B; }
+            .aakda-comment-block { margin-top: 12px; padding: 10px 12px; background: rgba(197,165,90,0.12); border-left: 3px solid #C5A55A; font-size: 12px; color: #1B2A4A; }
+            .aakda-comment-block strong { color: #C5A55A; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
             .footer { text-align: center; margin-top: 15px; font-size: 9px; color: #94a3b8; border-top: 1px dashed #C5A55A; padding-top: 8px; }
           </style>
         </head>
@@ -165,10 +170,26 @@ const BepariAakda = () => {
         <div className="aakda-modal">
           <div className="aakda-modal-content">
             <div className="aakda-actions">
-              <button className="btn-clear" onClick={() => setSelectedAakda(null)}>Back to List</button>
+              <button className="btn-clear" onClick={() => { setSelectedAakda(null); setComment(""); }}>Back to List</button>
               <button className="btn-primary" onClick={handlePrint}>Print Aakda</button>
             </div>
-            
+
+            {/* Comment box (live editable; only renders in slip if non-empty) */}
+            <div className="aakda-comment-input" style={{ margin: '12px 0', padding: '10px', background: '#F9F8F6', border: '1px dashed #C5A55A', borderRadius: '6px' }}>
+              <label htmlFor="aakda-comment" style={{ display: 'block', fontSize: '12px', color: '#1B2A4A', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Comment (optional — only shows on slip if filled)
+              </label>
+              <input
+                id="aakda-comment"
+                data-testid="aakda-comment-input"
+                type="text"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="e.g., Paid full settlement / Carry forward to next week"
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #C5A55A', borderRadius: '4px', fontSize: '13px' }}
+              />
+            </div>
+
             <div ref={printRef} className="aakda-slip-preview">
               <div className="aakda-slip">
                 <div className="header">
@@ -186,13 +207,22 @@ const BepariAakda = () => {
                   <thead>
                     <tr>
                       <th>Qty</th>
+                      <th>Rate</th>
                       <th>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>{selectedAakda.summary.quantity}</td>
-                      <td>{formatCurrency(selectedAakda.summary.gross_sales)}</td>
+                    {(selectedAakda.sales_detail || []).map((s, i) => (
+                      <tr key={i}>
+                        <td>{s.quantity}</td>
+                        <td>{formatCurrency(s.rate)}</td>
+                        <td>{formatCurrency(s.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="total-row">
+                      <td><strong>{selectedAakda.summary.quantity}</strong></td>
+                      <td>—</td>
+                      <td><strong>{formatCurrency(selectedAakda.summary.gross_sales)}</strong></td>
                     </tr>
                   </tbody>
                 </table>
@@ -251,6 +281,13 @@ const BepariAakda = () => {
                     </tr>
                   </tbody>
                 </table>
+
+                {comment && comment.trim() && (
+                  <div className="aakda-comment-block" style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(197,165,90,0.1)', borderLeft: '3px solid #C5A55A', fontSize: '12px', color: '#1B2A4A' }}>
+                    <strong style={{ color: '#C5A55A', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>Comment</strong>
+                    {comment}
+                  </div>
+                )}
 
                 <div className="footer">
                   <p>Haji Mushtaq Nana & Sons | Mandi Accounting App</p>
