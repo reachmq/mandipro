@@ -108,7 +108,8 @@ async def login(request: Request):
         "id": user_id,
         "email": user["email"],
         "name": user.get("name", ""),
-        "role": user.get("role", "user")
+        "role": user.get("role", "user"),
+        "access_token": access_token  # for cross-origin clients that can't use cookies
     })
     # Cookie security: in production (cross-origin Vercel→Render), browsers require SameSite=None + Secure
     _is_prod = os.environ.get("ENV", "development").lower() == "production"

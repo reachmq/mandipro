@@ -10,6 +10,16 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Configure axios to send cookies
 axios.defaults.withCredentials = true;
 
+// Auth token interceptor: attach Authorization header from localStorage if available
+// This makes auth work even when 3rd-party cookies are blocked (cross-origin frontend↔backend)
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // ============== AUTH CONTEXT ==============
 const AuthContext = createContext(null);
 
@@ -22,6 +32,7 @@ const AuthProvider = ({ children }) => {
       setUser(res.data);
       setChecking(false);
     }).catch(() => {
+      localStorage.removeItem("auth_token");
       setUser(false);
       setChecking(false);
     });
@@ -29,12 +40,16 @@ const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await axios.post(`${API}/auth/login`, { email, password });
+    if (res.data.access_token) {
+      localStorage.setItem("auth_token", res.data.access_token);
+    }
     setUser(res.data);
     return res.data;
   };
 
   const logout = async () => {
-    await axios.post(`${API}/auth/logout`);
+    await axios.post(`${API}/auth/logout`).catch(() => {});
+    localStorage.removeItem("auth_token");
     setUser(false);
   };
 
