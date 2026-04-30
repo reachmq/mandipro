@@ -2378,7 +2378,7 @@ const DukandarLedger = () => {
                 <td>${d.discounts.toLocaleString('en-IN')}</td>
                 <td>${d.receipts.toLocaleString('en-IN')}</td>
                 <td>${d.bf_disc > 0 ? d.bf_disc.toLocaleString('en-IN') : '-'}</td>
-                <td>${d.adjustments > 0 ? d.adjustments.toLocaleString('en-IN') : '-'}</td>
+                <td>${((d.adjustments || 0) + (d.writeoffs || 0)) > 0 ? ((d.adjustments || 0) + (d.writeoffs || 0)).toLocaleString('en-IN') : '-'}</td>
                 <td class="${d.balance >= 0 ? 'positive' : 'negative'}">${d.balance.toLocaleString('en-IN')}</td>
               </tr>`;
             }).join('')}
@@ -2432,7 +2432,7 @@ const DukandarLedger = () => {
 
   const totals = ledger.reduce((acc, d) => ({
     purchases: acc.purchases + d.purchases, discounts: acc.discounts + d.discounts, 
-    receipts: acc.receipts + d.receipts, bf_disc: acc.bf_disc + (d.bf_disc || 0), adj: acc.adj + (d.adjustments || 0), balance: acc.balance + d.balance
+    receipts: acc.receipts + d.receipts, bf_disc: acc.bf_disc + (d.bf_disc || 0), adj: acc.adj + (d.adjustments || 0) + (d.writeoffs || 0), balance: acc.balance + d.balance
   }), { purchases: 0, discounts: 0, receipts: 0, bf_disc: 0, adj: 0, balance: 0 });
 
   return (
@@ -2468,7 +2468,7 @@ const DukandarLedger = () => {
                 <td><strong>{d.name}</strong>{getAgingLabel(d) && <span className="aging-badge">{getAgingLabel(d)}</span>}</td><td>{d.phone || "-"}</td><td>{formatCurrency(d.opening)}</td><td>{formatCurrency(d.purchases)}</td>
                 <td>{formatCurrency(d.discounts)}</td><td>{formatCurrency(d.net_receivable)}</td><td>{formatCurrency(d.receipts)}</td>
                 <td className="bf-disc-col">{d.bf_disc > 0 ? formatCurrency(d.bf_disc) : "-"}</td>
-                <td className="adjustment-col">{d.adjustments > 0 ? formatCurrency(d.adjustments) : "-"}</td>
+                <td className="adjustment-col">{((d.adjustments || 0) + (d.writeoffs || 0)) > 0 ? formatCurrency((d.adjustments || 0) + (d.writeoffs || 0)) : "-"}</td>
                 <td className={d.balance >= 0 ? "positive" : "negative"}>{formatCurrency(d.balance)}</td>
               </tr>
             ))}
@@ -2499,7 +2499,7 @@ const DukandarLedger = () => {
               {d.discounts > 0 && <div className="lmc-row"><span>Discounts</span><span>-{formatCurrency(d.discounts)}</span></div>}
               <div className="lmc-row"><span>Receipts</span><span>-{formatCurrency(d.receipts)}</span></div>
               {d.bf_disc > 0 && <div className="lmc-row"><span>BF Disc</span><span>-{formatCurrency(d.bf_disc)}</span></div>}
-              {d.adjustments > 0 && <div className="lmc-row"><span>Adjustments</span><span>-{formatCurrency(d.adjustments)}</span></div>}
+              {((d.adjustments || 0) + (d.writeoffs || 0)) > 0 && <div className="lmc-row"><span>Adjustments</span><span>-{formatCurrency((d.adjustments || 0) + (d.writeoffs || 0))}</span></div>}
             </div>
           </div>
         ))}
