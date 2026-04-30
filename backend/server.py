@@ -1665,8 +1665,16 @@ async def get_bepaari_aakda(date: str):
         prev_payments = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "PAYMENT")
         prev_adj_amount = sum(a["amount"] for a in b_prev_adj)  # JV credits to this Bepaari
         
+        # Split previous JVs into two buckets:
+        #   - Write-offs (Debit=expense head, Credit=Bepaari) → increase payable (we absorbed expense, still owe more)
+        #   - Party-to-party (Debit=Dukandar/Advance, Credit=Bepaari) → reduce payable (party paid bepaari on our behalf)
+        expense_heads_bep = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        prev_adj_writeoff = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") in expense_heads_bep)
+        prev_adj_p2p = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") not in expense_heads_bep)
+
         prev_total_ded = prev_comm + prev_kk + prev_jb + prev_motor + prev_bhussa + prev_gawali + prev_cash_adv
-        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments - prev_adj_amount
+        # Opening: gross up, deductions+payments+party-to-party JV reduce it, write-offs add to it
+        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments - prev_adj_p2p + prev_adj_writeoff
         
         # Today's calculations
         today_gross = sum(s["gross_amount"] for s in b_sales_today)
@@ -1684,11 +1692,14 @@ async def get_bepaari_aakda(date: str):
         today_gawali = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "GAWALI")
         today_cash_adv = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "CASH_ADV")
         today_payments = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "PAYMENT")
-        today_adj_amount = sum(a["amount"] for a in b_adj_today)  # JV credits today
+        today_adj_writeoff = sum(a["amount"] for a in b_adj_today if a.get("debit_type") in expense_heads_bep)
+        today_adj_p2p = sum(a["amount"] for a in b_adj_today if a.get("debit_type") not in expense_heads_bep)
+        today_adj_amount = today_adj_writeoff + today_adj_p2p  # kept for compatibility / summary display
         
         today_total_ded = today_comm + today_kk + today_jb + today_motor + today_bhussa + today_gawali + today_cash_adv
         today_net = today_gross - today_total_ded
-        closing_balance = opening_balance + today_net - today_payments - today_adj_amount
+        # Closing: write-offs add to payable (we owe more), party-to-party JV reduces it
+        closing_balance = opening_balance + today_net - today_payments - today_adj_p2p + today_adj_writeoff
         
         # Sales breakdown by Dukandar
         sales_detail = []
