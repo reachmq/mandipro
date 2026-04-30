@@ -663,15 +663,28 @@ async def get_party_statement(
         if party_type == "bepaari":
             prev_payments = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "PAYMENT")
             prev_deductions = sum(c["amount"] for c in prev_cash if c.get("sub_type") != "PAYMENT")
+            # Auto-computed deductions (commission / KK / JB) — mirrors bepaari-ledger/aakda logic
+            settings_bep = await get_settings()
+            prev_qty = sum(s["quantity"] for s in prev_sales)
+            prev_market_days = len(set(s["date"] for s in prev_sales))
+            if party.get("flat_rate_per_goat"):
+                prev_commission = party["flat_rate_per_goat"] * prev_qty
+            else:
+                prev_commission = prev_sales_total * (party.get("commission_percent", settings_bep.get("commission_rate", 4)) / 100)
+            prev_kk = settings_bep.get("kk_fixed", 100) * prev_market_days if prev_market_days > 0 else 0
+            prev_jb = prev_qty * settings_bep.get("jb_rate", 10)
             # Party-to-party adj credits reduce payable; expense adj credits increase payable
             expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
             prev_adj_credits_party = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id and a.get("debit_type") not in expense_heads)
             prev_adj_credits_expense = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id and a.get("debit_type") in expense_heads)
             prev_adj_debits = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id)
             
-            # Bepaari balance = Opening + Sales - Deductions - Payments - PartyAdj + ExpenseAdj
+            # Bepaari balance = Opening + Sales - (Comm+KK+JB) - CashDeductions - Payments - PartyAdj + ExpenseAdj + Debits
             # Note: Balance transfers already modify opening_balance directly, so DON'T include them here
-            calculated_opening = original_opening + prev_sales_total - prev_deductions - prev_payments - prev_adj_credits_party + prev_adj_credits_expense + prev_adj_debits
+            calculated_opening = (original_opening + prev_sales_total
+                                  - prev_commission - prev_kk - prev_jb
+                                  - prev_deductions - prev_payments
+                                  - prev_adj_credits_party + prev_adj_credits_expense + prev_adj_debits)
         else:
             prev_receipts = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "RECEIPT")
             prev_bf_disc = sum(c.get("bf_disc", 0) for c in prev_cash)
