@@ -647,6 +647,7 @@ const CashBook = () => {
   const [entries, setEntries] = useState([]);
   const [allEntries, setAllEntries] = useState([]); // Store all entries for client-side filtering
   const [allUnfiltered, setAllUnfiltered] = useState([]); // ALL entries ignoring filter — for summary calc
+  const [allAdjustments, setAllAdjustments] = useState([]);
   const [settings, setSettings] = useState({ opening_cash: 0, opening_bank: 0 });
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
@@ -675,16 +676,18 @@ const CashBook = () => {
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
       
-      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes] = await Promise.all([
+      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`),
         axios.get(`${API}/cash-book`),  // ALL entries for summary calc
-        axios.get(`${API}/settings`)
+        axios.get(`${API}/settings`),
+        axios.get(`${API}/adjustments`)  // For JV CASH/BANK adjustments
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setAllUnfiltered(allRes.data);
       setSettings(settingsRes.data || { opening_cash: 0, opening_bank: 0 });
+      setAllAdjustments(adjRes.data || []);
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
         ...dukandarsRes.data.map(p => ({ ...p, ptype: "DUKANDAR" })),
@@ -802,29 +805,49 @@ const CashBook = () => {
 
     let before = [];
     let within = [];
+    let adjBefore = [];
+    let adjWithin = [];
     if (summaryMode === "daily") {
       before = allUnfiltered.filter(e => e.date < summaryDate);
       within = allUnfiltered.filter(e => e.date === summaryDate);
+      adjBefore = allAdjustments.filter(a => a.date < summaryDate);
+      adjWithin = allAdjustments.filter(a => a.date === summaryDate);
     } else {
-      // all-time
       within = allUnfiltered;
+      adjWithin = allAdjustments;
     }
+
+    // Helper: net JV impact on a specific head (CASH or BANK)
+    // Debit X = X is the receiver (money coming IN)
+    // Credit X = X is the payer (money going OUT)
+    const calcAdjFlow = (adjs, head) => {
+      let inn = 0, out = 0;
+      adjs.forEach(a => {
+        if (a.debit_type === head) inn += a.amount;
+        if (a.credit_type === head) out += a.amount;
+      });
+      return { inn, out };
+    };
 
     // Cash
     const cashBefore = calcInOut(before, "CASH");
     const cashWithin = calcInOut(within, "CASH");
-    const cashOpening = (settings.opening_cash || 0) + cashBefore.inn - cashBefore.out;
-    const cashClosing = cashOpening + cashWithin.inn - cashWithin.out;
+    const cashAdjBefore = calcAdjFlow(adjBefore, "CASH");
+    const cashAdjWithin = calcAdjFlow(adjWithin, "CASH");
+    const cashOpening = (settings.opening_cash || 0) + cashBefore.inn - cashBefore.out + cashAdjBefore.inn - cashAdjBefore.out;
+    const cashClosing = cashOpening + cashWithin.inn + cashAdjWithin.inn - cashWithin.out - cashAdjWithin.out;
 
     // Bank
     const bankBefore = calcInOut(before, "BANK");
     const bankWithin = calcInOut(within, "BANK");
-    const bankOpening = (settings.opening_bank || 0) + bankBefore.inn - bankBefore.out;
-    const bankClosing = bankOpening + bankWithin.inn - bankWithin.out;
+    const bankAdjBefore = calcAdjFlow(adjBefore, "BANK");
+    const bankAdjWithin = calcAdjFlow(adjWithin, "BANK");
+    const bankOpening = (settings.opening_bank || 0) + bankBefore.inn - bankBefore.out + bankAdjBefore.inn - bankAdjBefore.out;
+    const bankClosing = bankOpening + bankWithin.inn + bankAdjWithin.inn - bankWithin.out - bankAdjWithin.out;
 
     return {
-      cash: { opening: cashOpening, in: cashWithin.inn, out: cashWithin.out, closing: cashClosing },
-      bank: { opening: bankOpening, in: bankWithin.inn, out: bankWithin.out, closing: bankClosing }
+      cash: { opening: cashOpening, in: cashWithin.inn + cashAdjWithin.inn, out: cashWithin.out + cashAdjWithin.out, closing: cashClosing },
+      bank: { opening: bankOpening, in: bankWithin.inn + bankAdjWithin.inn, out: bankWithin.out + bankAdjWithin.out, closing: bankClosing }
     };
   })();
 
