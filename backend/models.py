@@ -163,8 +163,8 @@ class AdjustmentEntry(BaseModel):
 class AdjustmentEntryCreate(BaseModel):
     date: str
     debit_type: str
-    debit_party_id: str
+    debit_party_id: Optional[str] = None  # Optional: not needed for expense/income/cash heads
     credit_type: str
-    credit_party_id: str
+    credit_party_id: Optional[str] = None  # Optional: not needed for expense/income/cash heads
     amount: float
     narration: Optional[str] = None

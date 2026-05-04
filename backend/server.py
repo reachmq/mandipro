@@ -674,7 +674,7 @@ async def get_party_statement(
             prev_kk = settings_bep.get("kk_fixed", 100) * prev_market_days if prev_market_days > 0 else 0
             prev_jb = prev_qty * settings_bep.get("jb_rate", 10)
             # Party-to-party adj credits reduce payable; expense adj credits increase payable
-            expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+            expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
             prev_adj_credits_party = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id and a.get("debit_type") not in expense_heads)
             prev_adj_credits_expense = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id and a.get("debit_type") in expense_heads)
             prev_adj_debits = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id)
@@ -690,7 +690,7 @@ async def get_party_statement(
             prev_bf_disc = sum(c.get("bf_disc", 0) for c in prev_cash)
             prev_adj_debits = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id)
             # Write-offs: CREDIT to Dukandar from expense head = reduces receivable
-            expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+            expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
             prev_adj_writeoffs = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id and a.get("debit_type") in expense_heads)
             prev_adj_credits = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id and a.get("debit_type") not in expense_heads)
             
@@ -954,7 +954,7 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         
         # Adjustments: CREDIT to Bepaari from another PARTY = reduces our payable (someone paid them)
         # CREDIT to Bepaari from EXPENSE HEAD = increases our payable (extra payment/write-off)
-        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
         adj_credit_party = sum(a["amount"] for a in serialize_docs(adjustments) 
                        if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
                        and a.get("debit_type") not in expense_heads)
@@ -1027,7 +1027,7 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
                         if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"])
         # Write-offs: CREDIT to Dukandar from expense head = also reduces receivable
-        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
         adj_writeoff = sum(a["amount"] for a in serialize_docs(adjustments)
                           if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"]
                           and a.get("debit_type") in expense_heads)
@@ -1217,6 +1217,29 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
     jv_bf_disc = sum(a["amount"] for a in adjustments if a.get("debit_type") == "BF_DISCOUNT")
     mandi_total += jv_mandi_exp
     bf_disc_total += jv_bf_disc
+
+    # JV credits/debits to expense heads (settle the expense head e.g. via commission absorption)
+    mandi_total -= sum(a["amount"] for a in adjustments if a.get("credit_type") == "MANDI_EXPENSE")
+    bf_disc_total -= sum(a["amount"] for a in adjustments if a.get("credit_type") == "BF_DISCOUNT")
+    mhn_total += sum(a["amount"] for a in adjustments if a.get("debit_type") == "MHN_PERSONAL")
+    mhn_total -= sum(a["amount"] for a in adjustments if a.get("credit_type") == "MHN_PERSONAL")
+
+    # JV touching income heads (COMMISSION/KK/JB)
+    # Debit reduces the liability (we paid it out / settled), Credit increases (rare; e.g. correction)
+    commission_total += sum(a["amount"] for a in adjustments if a.get("credit_type") == "COMMISSION")
+    commission_total -= sum(a["amount"] for a in adjustments if a.get("debit_type") == "COMMISSION")
+    kk_total += sum(a["amount"] for a in adjustments if a.get("credit_type") == "KK")
+    kk_total -= sum(a["amount"] for a in adjustments if a.get("debit_type") == "KK")
+    jb_total += sum(a["amount"] for a in adjustments if a.get("credit_type") == "JB")
+    jb_total -= sum(a["amount"] for a in adjustments if a.get("debit_type") == "JB")
+    zakat_total += sum(a["amount"] for a in adjustments if a.get("credit_type") == "ZAKAT")
+    zakat_total -= sum(a["amount"] for a in adjustments if a.get("debit_type") == "ZAKAT")
+
+    # JV touching cash/bank (e.g. excess commission withdrawn, contra cash-bank transfer)
+    cash_balance += sum(a["amount"] for a in adjustments if a.get("debit_type") == "CASH")
+    cash_balance -= sum(a["amount"] for a in adjustments if a.get("credit_type") == "CASH")
+    bank_balance += sum(a["amount"] for a in adjustments if a.get("debit_type") == "BANK")
+    bank_balance -= sum(a["amount"] for a in adjustments if a.get("credit_type") == "BANK")
     
     adv_receivables = []
     for ap in advance_parties:
@@ -1299,9 +1322,17 @@ async def get_adjustments(
 @api_router.post("/adjustments")
 async def create_adjustment(data: AdjustmentEntryCreate, user: dict = Depends(get_current_user)):
     """Create a new adjustment/JV entry"""
+    # "Heads" are non-party ledger heads — no party_id needed
     EXPENSE_HEADS = {
-        "MANDI_EXPENSE": {"id": "__MANDI_EXPENSE__", "name": "Mandi Expense"},
-        "BF_DISCOUNT": {"id": "__BF_DISCOUNT__", "name": "BF Discount"},
+        "MANDI_EXPENSE": "Mandi Expense",
+        "BF_DISCOUNT": "BF Discount",
+        "MHN_PERSONAL": "MHN Personal",
+        "COMMISSION": "Commission",
+        "KK": "KK",
+        "JB": "JB",
+        "ZAKAT": "Zakat",
+        "CASH": "Cash",
+        "BANK": "Bank",
     }
     
     # Get party names
@@ -1310,7 +1341,7 @@ async def create_adjustment(data: AdjustmentEntryCreate, user: dict = Depends(ge
     
     # Find debit party (or expense head)
     if data.debit_type in EXPENSE_HEADS:
-        debit_party_name = EXPENSE_HEADS[data.debit_type]["name"]
+        debit_party_name = EXPENSE_HEADS[data.debit_type]
     else:
         for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
             party = await db[coll].find_one({"id": data.debit_party_id})
@@ -1320,7 +1351,7 @@ async def create_adjustment(data: AdjustmentEntryCreate, user: dict = Depends(ge
     
     # Find credit party (or expense head)
     if data.credit_type in EXPENSE_HEADS:
-        credit_party_name = EXPENSE_HEADS[data.credit_type]["name"]
+        credit_party_name = EXPENSE_HEADS[data.credit_type]
     else:
         for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
             party = await db[coll].find_one({"id": data.credit_party_id})
@@ -1331,9 +1362,9 @@ async def create_adjustment(data: AdjustmentEntryCreate, user: dict = Depends(ge
     if not debit_party_name or not credit_party_name:
         raise HTTPException(status_code=400, detail="Invalid party ID")
     
-    # For expense heads, use the fixed synthetic ID
-    debit_party_id = EXPENSE_HEADS[data.debit_type]["id"] if data.debit_type in EXPENSE_HEADS else data.debit_party_id
-    credit_party_id = EXPENSE_HEADS[data.credit_type]["id"] if data.credit_type in EXPENSE_HEADS else data.credit_party_id
+    # For expense heads, use a fixed synthetic ID
+    debit_party_id = f"__{data.debit_type}__" if data.debit_type in EXPENSE_HEADS else data.debit_party_id
+    credit_party_id = f"__{data.credit_type}__" if data.credit_type in EXPENSE_HEADS else data.credit_party_id
     
     adjustment = AdjustmentEntry(
         date=data.date,
@@ -1681,7 +1712,7 @@ async def get_bepaari_aakda(date: str):
         # Split previous JVs into two buckets:
         #   - Write-offs (Debit=expense head, Credit=Bepaari) → increase payable (we absorbed expense, still owe more)
         #   - Party-to-party (Debit=Dukandar/Advance, Credit=Bepaari) → reduce payable (party paid bepaari on our behalf)
-        expense_heads_bep = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        expense_heads_bep = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
         prev_adj_writeoff = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") in expense_heads_bep)
         prev_adj_p2p = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") not in expense_heads_bep)
 
@@ -2014,7 +2045,7 @@ async def get_collections_view():
         # JV: DEBIT to this dukandar = reduces their receivable
         jv_debit = sum(a["amount"] for a in all_adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == did)
         # JV: CREDIT to this dukandar from expense head = also reduces receivable (write-off)
-        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+        expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
         jv_writeoff = sum(a["amount"] for a in all_adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == did and a.get("debit_type") in expense_heads)
         total_payments += jv_debit + jv_writeoff
         
@@ -2111,7 +2142,7 @@ async def get_payment_aging(dukandar_id: str):
     # Total payments (FIFO)
     total_payments = sum(c["amount"] for c in cash if c.get("sub_type") == "RECEIPT")
     total_payments += sum(c["amount"] for c in cash if c.get("sub_type") == "BF_DISC")
-    expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT"]
+    expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
     total_payments += sum(a["amount"] for a in adj if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == dukandar_id)
     total_payments += sum(a["amount"] for a in adj if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == dukandar_id and a.get("debit_type") in expense_heads)
     total_payments += sum(s["discount"] for s in sales)

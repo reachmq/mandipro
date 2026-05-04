@@ -1145,11 +1145,14 @@ const Adjustments = () => {
     if (type === "CAPITAL") return capitalPartners.filter(p => p.partner_type === "CAPITAL");
     if (type === "LOAN") return capitalPartners.filter(p => p.partner_type === "LOAN");
     if (type === "AMANAT") return capitalPartners.filter(p => p.partner_type === "AMANAT");
-    if (type === "MANDI_EXPENSE" || type === "BF_DISCOUNT") return []; // No party needed
+    if (type === "MANDI_EXPENSE" || type === "BF_DISCOUNT" || type === "MHN_PERSONAL"
+        || type === "COMMISSION" || type === "KK" || type === "JB" || type === "ZAKAT"
+        || type === "CASH" || type === "BANK") return []; // No party needed
     return [];
   };
 
-  const isExpenseHead = (type) => type === "MANDI_EXPENSE" || type === "BF_DISCOUNT";
+  const HEAD_TYPES = ["MANDI_EXPENSE","BF_DISCOUNT","MHN_PERSONAL","COMMISSION","KK","JB","ZAKAT","CASH","BANK"];
+  const isExpenseHead = (type) => HEAD_TYPES.includes(type);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1243,6 +1246,17 @@ const Adjustments = () => {
               <optgroup label="Expense Heads (Write-off)">
                 <option value="MANDI_EXPENSE">Mandi Expense</option>
                 <option value="BF_DISCOUNT">BF Discount</option>
+                <option value="MHN_PERSONAL">MHN Personal Draw</option>
+              </optgroup>
+              <optgroup label="Income Heads (Reduce / Withdraw)">
+                <option value="COMMISSION">Commission</option>
+                <option value="KK">KK</option>
+                <option value="JB">JB</option>
+                <option value="ZAKAT">Zakat</option>
+              </optgroup>
+              <optgroup label="Cash / Bank (Money In)">
+                <option value="CASH">Cash (Received)</option>
+                <option value="BANK">Bank (Received)</option>
               </optgroup>
             </select>
             {!isExpenseHead(form.debit_type) && (
@@ -1272,6 +1286,17 @@ const Adjustments = () => {
               <optgroup label="Expense Heads (Write-off)">
                 <option value="MANDI_EXPENSE">Mandi Expense</option>
                 <option value="BF_DISCOUNT">BF Discount</option>
+                <option value="MHN_PERSONAL">MHN Personal Draw</option>
+              </optgroup>
+              <optgroup label="Income Heads (Add / Receive)">
+                <option value="COMMISSION">Commission</option>
+                <option value="KK">KK</option>
+                <option value="JB">JB</option>
+                <option value="ZAKAT">Zakat</option>
+              </optgroup>
+              <optgroup label="Cash / Bank (Money Out)">
+                <option value="CASH">Cash (Paid Out)</option>
+                <option value="BANK">Bank (Paid Out)</option>
               </optgroup>
             </select>
             {!isExpenseHead(form.credit_type) && (
