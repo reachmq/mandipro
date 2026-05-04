@@ -1113,6 +1113,12 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
     capital_partners = serialize_docs(await db.capital_partners.find({"is_active": True}).to_list(100))
     advance_parties = serialize_docs(await db.advance_parties.find({"is_active": True}).to_list(100))
     
+    # Pre-fetch adjustments (used by capital/loans/amanat balance calc + later income/cash heads)
+    adj_query = {}
+    if as_on_date:
+        adj_query["date"] = {"$lte": as_on_date}
+    adjustments = serialize_docs(await db.adjustments.find(adj_query).to_list(5000))
+    
     # Build individual lists for Capital, Loans, and Amanat with their balances
     capital_list = []
     loans_list = []
@@ -1121,6 +1127,7 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
     for p in capital_partners:
         p_type = p.get("partner_type")
         p_name = p.get("name")
+        p_id = p.get("id")
         p_opening = p.get("opening_balance", 0)
         
         # Calculate movement for this partner
@@ -1128,8 +1135,13 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
                           if c.get("type") == p_type and c.get("sub_type") == "TAKEN" and c.get("party_name") == p_name)
         partner_repaid = sum(c["amount"] for c in cash_entries 
                            if c.get("type") == p_type and c.get("sub_type") in ["REPAID", "WITHDRAWN"] and c.get("party_name") == p_name)
+        # Adjustments touching this partner: Credit increases (we owe more), Debit decreases (settlement)
+        partner_adj_credits = sum(a["amount"] for a in adjustments
+                                  if a.get("credit_type") == p_type and a.get("credit_party_id") == p_id)
+        partner_adj_debits = sum(a["amount"] for a in adjustments
+                                 if a.get("debit_type") == p_type and a.get("debit_party_id") == p_id)
         
-        partner_balance = p_opening + partner_taken - partner_repaid
+        partner_balance = p_opening + partner_taken - partner_repaid + partner_adj_credits - partner_adj_debits
         
         if partner_balance != 0:  # Only show if there's a balance
             entry = {"id": p.get("id"), "name": p_name, "amount": partner_balance}
@@ -1205,13 +1217,7 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
     mandi_total = settings.get("mandi_exp_opening", 0) + mandi_exp
     bf_disc_total = settings.get("bf_disc_opening", 0) + bf_disc
     mhn_total = settings.get("mhn_personal_opening", 0) + mhn_personal
-    
-    # Get adjustments for advance party and expense write-off calculations
-    adj_query = {}
-    if as_on_date:
-        adj_query["date"] = {"$lte": as_on_date}
-    adjustments = serialize_docs(await db.adjustments.find(adj_query).to_list(5000))
-    
+
     # Add expense write-offs from JV entries to expense totals
     jv_mandi_exp = sum(a["amount"] for a in adjustments if a.get("debit_type") == "MANDI_EXPENSE")
     jv_bf_disc = sum(a["amount"] for a in adjustments if a.get("debit_type") == "BF_DISCOUNT")
