@@ -3096,6 +3096,157 @@ const UserManagement = () => {
   );
 };
 
+// ============== DEMO WELCOME TOUR ==============
+const DemoTour = () => {
+  const { user } = useAuth();
+  const [step, setStep] = useState(0);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    if (user?.tenant === 'demo' && !localStorage.getItem('demo_tour_seen_v1')) {
+      // small delay so the dashboard loads first
+      const t = setTimeout(() => setShow(true), 500);
+      return () => clearTimeout(t);
+    }
+  }, [user]);
+
+  if (!show) return null;
+
+  const steps = [
+    {
+      icon: '👋',
+      title: 'Welcome to Mandipro Demo!',
+      body: 'This is your private sandbox. Whatever you enter here stays private and is auto-isolated from real production data. Take 60 seconds to see how it works.',
+    },
+    {
+      icon: '⚙️',
+      title: 'Step 1 — Add Masters',
+      body: 'Open the "Masters" tab from the left sidebar. Add at least one Bepaari (seller) and one Dukandar (buyer). You can also add Capital, Loans, or Advance parties.',
+    },
+    {
+      icon: '🐐',
+      title: 'Step 2 — Enter a Daily Sale',
+      body: 'Open "Daily Sales". Pick the Bepaari, the Dukandar, enter quantity, your rate, and the rate to Dukandar. Mandipro auto-calculates commission, mandi expenses, and net payable to Bepaari.',
+    },
+    {
+      icon: '💰',
+      title: 'Step 3 — Record Cash / Bank',
+      body: 'Open "Cash & Bank". Record receipts from Dukandars and payments to Bepaaris. Pick mode (Cash / Bank / UPI). Each entry auto-links to ledgers.',
+    },
+    {
+      icon: '📑',
+      title: 'Step 4 — Balance Sheet (the magic)',
+      body: 'Open "Balance Sheet". No matter how many entries you make, Assets will always tally with Liabilities + Capital. Try breaking it — you can\'t. That\'s double-entry done right.',
+    },
+    {
+      icon: '↻',
+      title: 'Step 5 — Reset Anytime',
+      body: 'See the yellow banner up top? Hit "Reset Demo Data" whenever you want a clean slate. Real production data is never touched — promise.',
+    },
+    {
+      icon: '🚀',
+      title: 'You\'re ready!',
+      body: 'Start with Masters → Daily Sales → Balance Sheet. Have fun exploring. If you love it, get in touch to set up your own private workspace.',
+    },
+  ];
+
+  const close = () => {
+    localStorage.setItem('demo_tour_seen_v1', '1');
+    setShow(false);
+  };
+  const next = () => {
+    if (step >= steps.length - 1) close();
+    else setStep(step + 1);
+  };
+
+  const cur = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div data-testid="demo-tour-overlay" style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(15, 23, 42, 0.72)',
+      backdropFilter: 'blur(4px)',
+      zIndex: 9999,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      animation: 'fadeIn 0.25s ease',
+    }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '16px',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        maxWidth: '440px',
+        width: '100%',
+        padding: '28px 24px 22px',
+        position: 'relative',
+        border: '2px solid #fbbf24',
+      }}>
+        <button
+          data-testid="demo-tour-skip"
+          onClick={close}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '14px',
+            background: 'transparent',
+            border: 'none',
+            fontSize: '13px',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+        >Skip tour ✕</button>
+        <div style={{ fontSize: '46px', textAlign: 'center', marginBottom: '6px' }}>{cur.icon}</div>
+        <h2 style={{
+          fontSize: '20px',
+          fontWeight: 700,
+          color: '#1f2937',
+          textAlign: 'center',
+          margin: '0 0 10px',
+        }}>{cur.title}</h2>
+        <p style={{
+          fontSize: '14px',
+          color: '#475569',
+          lineHeight: 1.55,
+          textAlign: 'center',
+          margin: '0 0 20px',
+        }}>{cur.body}</p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '18px' }}>
+          {steps.map((_, i) => (
+            <span key={i} style={{
+              width: i === step ? '22px' : '7px',
+              height: '7px',
+              borderRadius: '999px',
+              background: i === step ? '#f59e0b' : '#e2e8f0',
+              transition: 'all 0.25s',
+            }} />
+          ))}
+        </div>
+        <button
+          data-testid="demo-tour-next"
+          onClick={next}
+          style={{
+            width: '100%',
+            background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+            color: '#fff',
+            border: 'none',
+            padding: '11px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            letterSpacing: '0.3px',
+          }}
+        >{isLast ? "Let's go 🚀" : `Next — ${step + 1} / ${steps.length}`}</button>
+      </div>
+    </div>
+  );
+};
+
 // ============== DEMO BANNER ==============
 const DemoBanner = () => {
   const { user } = useAuth();
@@ -3114,6 +3265,11 @@ const DemoBanner = () => {
     }
   };
 
+  const replayTour = () => {
+    localStorage.removeItem('demo_tour_seen_v1');
+    window.location.reload();
+  };
+
   return (
     <div data-testid="demo-banner" style={{
       background: 'linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)',
@@ -3130,21 +3286,37 @@ const DemoBanner = () => {
       boxShadow: '0 2px 4px rgba(0,0,0,0.06)'
     }}>
       <span>🧪 DEMO MODE — your test entries are private and isolated. Real production data is untouched.</span>
-      <button
-        data-testid="demo-reset-btn"
-        onClick={handleReset}
-        disabled={resetting}
-        style={{
-          background: '#1f2937',
-          color: '#fbbf24',
-          border: 'none',
-          padding: '6px 14px',
-          borderRadius: '6px',
-          cursor: resetting ? 'wait' : 'pointer',
-          fontSize: '13px',
-          fontWeight: 600
-        }}
-      >{resetting ? 'Resetting…' : '↻ Reset Demo Data'}</button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          data-testid="demo-replay-tour-btn"
+          onClick={replayTour}
+          style={{
+            background: 'transparent',
+            color: '#1f2937',
+            border: '1px solid #1f2937',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 600
+          }}
+        >👋 Replay Tour</button>
+        <button
+          data-testid="demo-reset-btn"
+          onClick={handleReset}
+          disabled={resetting}
+          style={{
+            background: '#1f2937',
+            color: '#fbbf24',
+            border: 'none',
+            padding: '6px 14px',
+            borderRadius: '6px',
+            cursor: resetting ? 'wait' : 'pointer',
+            fontSize: '13px',
+            fontWeight: 600
+          }}
+        >{resetting ? 'Resetting…' : '↻ Reset Demo Data'}</button>
+      </div>
     </div>
   );
 };
@@ -3162,6 +3334,7 @@ function App() {
                 <Sidebar />
                 <main className="main-content">
                   <DemoBanner />
+                  <DemoTour />
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/daily-sales" element={<DailySales />} />
