@@ -2,12 +2,14 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+from contextvars import ContextVar
 from models import (
     Bepaari, Dukandar, AdvanceParty, CapitalPartner, Settings,
     DailySale, CashBookEntry, DailySaleCreate, CashBookEntryCreate, MasterCreate,
@@ -25,13 +27,68 @@ load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+
+# ============== MULTI-TENANT DB ROUTING ==============
+# Each user has a "tenant" field (default "main"). Demo user has tenant="demo".
+# `users` collection always lives in the MAIN db (needed for auth lookup before tenant is known).
+# All other collections route to the tenant-specific db.
+MAIN_DB_NAME = os.environ['DB_NAME']
+DEMO_DB_NAME = MAIN_DB_NAME + "_demo"
+_current_tenant: ContextVar[str] = ContextVar("current_tenant", default="main")
+
+def _db_name_for_tenant(tenant: str) -> str:
+    return DEMO_DB_NAME if tenant == "demo" else MAIN_DB_NAME
+
+class _TenantDBProxy:
+    """Proxy that returns the right collection based on current tenant.
+    `users` is always in the main DB so login can resolve any user.
+    Supports both dot access (db.cash_book) and bracket access (db[coll])."""
+    def _resolve(self, collection_name: str):
+        if collection_name == "users":
+            return client[MAIN_DB_NAME]["users"]
+        tenant = _current_tenant.get()
+        return client[_db_name_for_tenant(tenant)][collection_name]
+
+    def __getattr__(self, collection_name: str):
+        return self._resolve(collection_name)
+
+    def __getitem__(self, collection_name: str):
+        return self._resolve(collection_name)
+
+db = _TenantDBProxy()
 
 app = FastAPI(title="Mandi Accounting System")
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# ============== TENANT RESOLVER MIDDLEWARE ==============
+# Runs before EVERY request to set the per-request tenant ContextVar.
+# This guarantees that endpoints WITHOUT explicit Depends(get_current_user) still
+# route to the correct database (e.g., GET /api/bepaaris is a public-ish endpoint).
+class TenantMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        token = request.cookies.get("access_token")
+        if not token:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+        tenant = "main"
+        if token:
+            try:
+                payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+                if payload.get("type") == "access":
+                    tenant = payload.get("tenant", "main")
+            except jwt.InvalidTokenError:
+                pass
+        token_set = _current_tenant.set(tenant)
+        try:
+            response = await call_next(request)
+        finally:
+            _current_tenant.reset(token_set)
+        return response
 
 # ============== AUTH HELPERS ==============
 JWT_ALGORITHM = "HS256"
@@ -45,12 +102,12 @@ def hash_password(password: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
-def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
+def create_access_token(user_id: str, email: str, tenant: str = "main") -> str:
+    payload = {"sub": user_id, "email": email, "tenant": tenant, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
-def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+def create_refresh_token(user_id: str, tenant: str = "main") -> str:
+    payload = {"sub": user_id, "tenant": tenant, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 from bson import ObjectId
@@ -67,11 +124,15 @@ async def get_current_user(request: Request) -> dict:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "access":
             raise HTTPException(status_code=401, detail="Invalid token type")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        # users always in main DB
+        user = await client[MAIN_DB_NAME].users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         user["_id"] = str(user["_id"])
         user.pop("password_hash", None)
+        # Defensive: ensure contextvar matches the user's tenant from DB
+        # (middleware already set this from JWT, but DB is the source of truth)
+        _current_tenant.set(user.get("tenant", "main"))
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -101,14 +162,16 @@ async def login(request: Request):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     user_id = str(user["_id"])
-    access_token = create_access_token(user_id, email)
-    refresh_token = create_refresh_token(user_id)
+    tenant = user.get("tenant", "main")
+    access_token = create_access_token(user_id, email, tenant)
+    refresh_token = create_refresh_token(user_id, tenant)
     
     response = JSONResponse(content={
         "id": user_id,
         "email": user["email"],
         "name": user.get("name", ""),
         "role": user.get("role", "user"),
+        "tenant": tenant,
         "access_token": access_token  # for cross-origin clients that can't use cookies
     })
     # Cookie security: in production (cross-origin Vercel→Render), browsers require SameSite=None + Secure
@@ -144,7 +207,8 @@ async def refresh_token(request: Request):
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-        new_access = create_access_token(str(user["_id"]), user["email"])
+        tenant = user.get("tenant", "main")
+        new_access = create_access_token(str(user["_id"]), user["email"], tenant)
         response = JSONResponse(content={"status": "refreshed"})
         _is_prod = os.environ.get("ENV", "development").lower() == "production"
         response.set_cookie(key="access_token", value=new_access, httponly=True, secure=_is_prod, samesite=("none" if _is_prod else "lax"), max_age=86400, path="/")
@@ -2206,6 +2270,22 @@ def formatCurrency_py(amount):
 
 
 # ============== REGISTER ROUTER & MIDDLEWARE ==============
+
+# ============== DEMO RESET ENDPOINT ==============
+@api_router.post("/demo/reset")
+async def reset_demo_data(user: dict = Depends(get_current_user)):
+    """Wipe all demo-tenant data. Only callable by users with tenant=demo."""
+    if user.get("tenant") != "demo":
+        raise HTTPException(status_code=403, detail="Only demo users can reset demo data")
+    demo_db = client[DEMO_DB_NAME]
+    # Drop all collections in demo DB (safe - users live in main DB)
+    collections = await demo_db.list_collection_names()
+    for coll in collections:
+        await demo_db[coll].drop()
+    logger.info(f"Demo data reset by {user.get('email')}")
+    return {"status": "reset", "collections_dropped": collections}
+
+
 app.include_router(api_router)
 
 # Read CORS origins from env (comma-separated). Defaults safe for local dev.
@@ -2214,6 +2294,9 @@ if _cors_env.strip() == "*":
     cors_origins = ["*"]
 else:
     cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+
+# Tenant middleware (added FIRST so CORS wraps it; runs INSIDE CORS for actual requests)
+app.add_middleware(TenantMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -2227,23 +2310,48 @@ app.add_middleware(
 async def shutdown_db_client():
     client.close()
 
+
 @app.on_event("startup")
 async def startup_event():
-    # Create indexes
-    await db.users.create_index("email", unique=True)
+    # Create indexes (users collection always in main DB)
+    await client[MAIN_DB_NAME].users.create_index("email", unique=True)
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@mandi.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "mandi@2026")
-    existing = await db.users.find_one({"email": admin_email})
+    existing = await client[MAIN_DB_NAME].users.find_one({"email": admin_email})
     if existing is None:
-        await db.users.insert_one({
+        await client[MAIN_DB_NAME].users.insert_one({
             "email": admin_email,
             "password_hash": hash_password(admin_password),
             "name": "Admin",
             "role": "admin",
+            "tenant": "main",
             "created_at": datetime.now(timezone.utc)
         })
         logger.info(f"Admin user seeded: {admin_email}")
     elif not verify_password(admin_password, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        await client[MAIN_DB_NAME].users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
         logger.info("Admin password updated")
+    # Backfill tenant on existing users (one-time migration)
+    await client[MAIN_DB_NAME].users.update_many({"tenant": {"$exists": False}}, {"$set": {"tenant": "main"}})
+
+    # Seed demo user (idempotent password reset on every boot for predictability)
+    demo_email = os.environ.get("DEMO_EMAIL", "demo@mandipro.in")
+    demo_password = os.environ.get("DEMO_PASSWORD", "demo@2026")
+    demo_existing = await client[MAIN_DB_NAME].users.find_one({"email": demo_email})
+    if demo_existing is None:
+        await client[MAIN_DB_NAME].users.insert_one({
+            "email": demo_email,
+            "password_hash": hash_password(demo_password),
+            "name": "Demo User",
+            "role": "admin",  # admin within their own demo tenant
+            "tenant": "demo",
+            "created_at": datetime.now(timezone.utc)
+        })
+        logger.info(f"Demo user seeded: {demo_email}")
+    else:
+        # Ensure tenant flag and password are correct
+        await client[MAIN_DB_NAME].users.update_one(
+            {"email": demo_email},
+            {"$set": {"tenant": "demo", "role": "admin", "password_hash": hash_password(demo_password)}}
+        )

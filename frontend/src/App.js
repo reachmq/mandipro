@@ -95,6 +95,23 @@ const LoginPage = () => {
           <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required data-testid="login-password" />
           <button type="submit" disabled={loading} data-testid="login-submit">{loading ? 'Signing in...' : 'Sign In'}</button>
         </form>
+        <button
+          type="button"
+          data-testid="login-demo-btn"
+          onClick={() => { setEmail('demo@mandipro.in'); setPassword('demo@2026'); }}
+          style={{
+            marginTop: '14px',
+            width: '100%',
+            background: 'transparent',
+            color: '#d97706',
+            border: '1px dashed #d97706',
+            padding: '8px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >🧪 Try Demo Account</button>
       </div>
     </div>
   );
@@ -3079,6 +3096,59 @@ const UserManagement = () => {
   );
 };
 
+// ============== DEMO BANNER ==============
+const DemoBanner = () => {
+  const { user } = useAuth();
+  const [resetting, setResetting] = useState(false);
+  if (user?.tenant !== 'demo') return null;
+
+  const handleReset = async () => {
+    if (!window.confirm('Reset demo data?\n\nThis will wipe ALL test entries (sales, cash book, JVs, masters) so the next prospect starts fresh. Your real production data is NOT touched.')) return;
+    setResetting(true);
+    try {
+      await axios.post(`${API}/demo/reset`);
+      window.location.reload();
+    } catch (err) {
+      alert('Reset failed: ' + (err.response?.data?.detail || err.message));
+      setResetting(false);
+    }
+  };
+
+  return (
+    <div data-testid="demo-banner" style={{
+      background: 'linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)',
+      color: '#1f2937',
+      padding: '10px 16px',
+      fontWeight: 600,
+      fontSize: '14px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '12px',
+      flexWrap: 'wrap',
+      borderBottom: '2px solid #d97706',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.06)'
+    }}>
+      <span>🧪 DEMO MODE — your test entries are private and isolated. Real production data is untouched.</span>
+      <button
+        data-testid="demo-reset-btn"
+        onClick={handleReset}
+        disabled={resetting}
+        style={{
+          background: '#1f2937',
+          color: '#fbbf24',
+          border: 'none',
+          padding: '6px 14px',
+          borderRadius: '6px',
+          cursor: resetting ? 'wait' : 'pointer',
+          fontSize: '13px',
+          fontWeight: 600
+        }}
+      >{resetting ? 'Resetting…' : '↻ Reset Demo Data'}</button>
+    </div>
+  );
+};
+
 // ============== MAIN APP ==============
 function App() {
   return (
@@ -3091,6 +3161,7 @@ function App() {
               <div className="app-container">
                 <Sidebar />
                 <main className="main-content">
+                  <DemoBanner />
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/daily-sales" element={<DailySales />} />
