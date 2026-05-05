@@ -187,7 +187,7 @@ const Sidebar = () => {
         </div>
         <nav className="sidebar-nav">
           {visibleNavItems.map((item) => (
-            <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+            <NavLink key={item.path} to={item.path} data-testid={`nav-${item.path.replace(/\//g, '') || 'dashboard'}`} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
             </NavLink>
@@ -3096,59 +3096,107 @@ const UserManagement = () => {
   );
 };
 
-// ============== DEMO WELCOME TOUR ==============
+// ============== DEMO WELCOME TOUR (Spotlight) ==============
 const DemoTour = () => {
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [show, setShow] = useState(false);
+  const [rect, setRect] = useState(null);
+  const [tick, setTick] = useState(0); // re-measure trigger
 
   useEffect(() => {
     if (user?.tenant === 'demo' && !localStorage.getItem('demo_tour_seen_v1')) {
-      // small delay so the dashboard loads first
-      const t = setTimeout(() => setShow(true), 500);
+      const t = setTimeout(() => setShow(true), 600);
       return () => clearTimeout(t);
     }
   }, [user]);
 
-  if (!show) return null;
-
+  // Tour steps: each step targets a specific UI element by selector (or null = centered modal)
   const steps = [
     {
       icon: '👋',
       title: 'Welcome to Mandipro Demo!',
-      body: 'This is your private sandbox. Whatever you enter here stays private and is auto-isolated from real production data. Take 60 seconds to see how it works.',
+      body: "This is your private sandbox. Whatever you enter stays isolated from real data. Take 60 seconds to see how it works.",
+      target: null,
     },
     {
       icon: '⚙️',
       title: 'Step 1 — Add Masters',
-      body: 'Open the "Masters" tab from the left sidebar. Add at least one Bepaari (seller) and one Dukandar (buyer). You can also add Capital, Loans, or Advance parties.',
+      body: "Click here to add your Bepaaris (sellers), Dukandars (buyers), Capital partners, and Loan parties. The foundation of every entry.",
+      target: '[data-testid="nav-masters"]',
     },
     {
       icon: '🐐',
-      title: 'Step 2 — Enter a Daily Sale',
-      body: 'Open "Daily Sales". Pick the Bepaari, the Dukandar, enter quantity, your rate, and the rate to Dukandar. Mandipro auto-calculates commission, mandi expenses, and net payable to Bepaari.',
+      title: 'Step 2 — Daily Sales',
+      body: "This is where you log every sale. Pick the Bepaari, Dukandar, qty, rates — Mandipro auto-calculates commission, mandi exp, and net amounts.",
+      target: '[data-testid="nav-daily-sales"]',
     },
     {
       icon: '💰',
-      title: 'Step 3 — Record Cash / Bank',
-      body: 'Open "Cash & Bank". Record receipts from Dukandars and payments to Bepaaris. Pick mode (Cash / Bank / UPI). Each entry auto-links to ledgers.',
+      title: 'Step 3 — Cash & Bank',
+      body: "Record receipts from Dukandars and payments to Bepaaris here. Pick mode (Cash / Bank / UPI) — every entry auto-links to ledgers.",
+      target: '[data-testid="nav-cash-book"]',
+    },
+    {
+      icon: '🔄',
+      title: 'Step 4 — Adjustments (JV)',
+      body: "Triangular settlements made easy. e.g. 'Bepaari Ali pays Dukandar Vinod' — one entry hits both ledgers correctly.",
+      target: '[data-testid="nav-adjustments"]',
     },
     {
       icon: '📑',
-      title: 'Step 4 — Balance Sheet (the magic)',
-      body: 'Open "Balance Sheet". No matter how many entries you make, Assets will always tally with Liabilities + Capital. Try breaking it — you can\'t. That\'s double-entry done right.',
+      title: 'Step 5 — Balance Sheet',
+      body: "The proof. Every entry you make keeps Assets = Liabilities + Capital, automatically. Try to break it — you can't!",
+      target: '[data-testid="nav-balance-sheet"]',
+    },
+    {
+      icon: '🧾',
+      title: 'Step 6 — Bepaari Aakda',
+      body: "Daily settlement slips. Print a clean summary of each Bepaari's transactions for the day. Ready to share over WhatsApp.",
+      target: '[data-testid="nav-bepaari-aakda"]',
     },
     {
       icon: '↻',
-      title: 'Step 5 — Reset Anytime',
-      body: 'See the yellow banner up top? Hit "Reset Demo Data" whenever you want a clean slate. Real production data is never touched — promise.',
+      title: 'Step 7 — Reset Anytime',
+      body: "See the yellow banner up top? Hit 'Reset Demo Data' for a clean slate. Real production data is never touched.",
+      target: '[data-testid="demo-reset-btn"]',
     },
     {
       icon: '🚀',
-      title: 'You\'re ready!',
-      body: 'Start with Masters → Daily Sales → Balance Sheet. Have fun exploring. If you love it, get in touch to set up your own private workspace.',
+      title: "You're ready!",
+      body: "Start with Masters → Daily Sales → Balance Sheet. Have fun! Loved it? Get in touch to set up your own private workspace.",
+      target: null,
     },
   ];
+
+  // Measure target element on each step / resize / scroll
+  useEffect(() => {
+    if (!show) return;
+    const measure = () => {
+      const sel = steps[step]?.target;
+      if (!sel) {
+        setRect(null);
+        return;
+      }
+      const el = document.querySelector(sel);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+      } else {
+        setRect(null);
+      }
+    };
+    measure();
+    const onResize = () => { setTick(t => t + 1); };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onResize, true);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onResize, true);
+    };
+  }, [step, show, tick]);
+
+  if (!show) return null;
 
   const close = () => {
     localStorage.setItem('demo_tour_seen_v1', '1');
@@ -3158,31 +3206,91 @@ const DemoTour = () => {
     if (step >= steps.length - 1) close();
     else setStep(step + 1);
   };
+  const prev = () => { if (step > 0) setStep(step - 1); };
 
   const cur = steps[step];
   const isLast = step === steps.length - 1;
+  const isFirst = step === 0;
+  const PAD = 8;       // padding around highlight
+  const CARD_W = 360;
+  const CARD_H_EST = 230;
+
+  // Compute card position: prefer right of target, fallback below, fallback centered
+  let cardStyle = {
+    position: 'fixed',
+    zIndex: 10001,
+    width: `${CARD_W}px`,
+    maxWidth: 'calc(100vw - 32px)',
+  };
+  if (!rect) {
+    cardStyle.top = '50%';
+    cardStyle.left = '50%';
+    cardStyle.transform = 'translate(-50%, -50%)';
+  } else {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const rightSpace = vw - (rect.left + rect.width);
+    const belowSpace = vh - (rect.top + rect.height);
+    if (rightSpace >= CARD_W + 24) {
+      // place to the right
+      cardStyle.left = `${rect.left + rect.width + 16}px`;
+      cardStyle.top = `${Math.max(16, Math.min(rect.top, vh - CARD_H_EST - 16))}px`;
+    } else if (belowSpace >= CARD_H_EST + 16) {
+      // place below
+      cardStyle.left = `${Math.max(16, Math.min(rect.left, vw - CARD_W - 16))}px`;
+      cardStyle.top = `${rect.top + rect.height + 14}px`;
+    } else {
+      // place above
+      cardStyle.left = `${Math.max(16, Math.min(rect.left, vw - CARD_W - 16))}px`;
+      cardStyle.top = `${Math.max(16, rect.top - CARD_H_EST - 14)}px`;
+    }
+  }
+
+  // Mask: 4 dark rectangles around the spotlight (no blur)
+  const overlays = [];
+  if (rect) {
+    const t = rect.top - PAD;
+    const l = rect.left - PAD;
+    const w = rect.width + PAD * 2;
+    const h = rect.height + PAD * 2;
+    const dark = 'rgba(15, 23, 42, 0.68)';
+    // top
+    overlays.push(<div key="t" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: `${Math.max(0, t)}px`, background: dark, zIndex: 10000, pointerEvents: 'auto' }} />);
+    // bottom
+    overlays.push(<div key="b" style={{ position: 'fixed', top: `${t + h}px`, left: 0, width: '100vw', height: `calc(100vh - ${t + h}px)`, background: dark, zIndex: 10000, pointerEvents: 'auto' }} />);
+    // left
+    overlays.push(<div key="l" style={{ position: 'fixed', top: `${t}px`, left: 0, width: `${Math.max(0, l)}px`, height: `${h}px`, background: dark, zIndex: 10000, pointerEvents: 'auto' }} />);
+    // right
+    overlays.push(<div key="r" style={{ position: 'fixed', top: `${t}px`, left: `${l + w}px`, width: `calc(100vw - ${l + w}px)`, height: `${h}px`, background: dark, zIndex: 10000, pointerEvents: 'auto' }} />);
+    // ring around target (no blur, just a glowing outline)
+    overlays.push(<div key="ring" style={{
+      position: 'fixed',
+      top: `${t}px`,
+      left: `${l}px`,
+      width: `${w}px`,
+      height: `${h}px`,
+      border: '3px solid #fbbf24',
+      borderRadius: '10px',
+      boxShadow: '0 0 0 4px rgba(251, 191, 36, 0.25), 0 0 24px rgba(251, 191, 36, 0.55)',
+      zIndex: 10000,
+      pointerEvents: 'none',
+      animation: 'pulseRing 1.6s ease-in-out infinite',
+    }} />);
+  } else {
+    // full-screen dim for centered welcome / final step
+    overlays.push(<div key="full" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', zIndex: 10000 }} />);
+  }
 
   return (
-    <div data-testid="demo-tour-overlay" style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(15, 23, 42, 0.72)',
-      backdropFilter: 'blur(4px)',
-      zIndex: 9999,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '16px',
-      animation: 'fadeIn 0.25s ease',
-    }}>
-      <div style={{
+    <>
+      <style>{`@keyframes pulseRing {0%,100%{box-shadow:0 0 0 4px rgba(251,191,36,0.25),0 0 24px rgba(251,191,36,0.55)}50%{box-shadow:0 0 0 8px rgba(251,191,36,0.18),0 0 36px rgba(251,191,36,0.75)}}`}</style>
+      {overlays}
+      <div data-testid="demo-tour-card" style={{
+        ...cardStyle,
         background: '#fff',
-        borderRadius: '16px',
-        boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
-        maxWidth: '440px',
-        width: '100%',
-        padding: '28px 24px 22px',
-        position: 'relative',
+        borderRadius: '14px',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+        padding: '22px 22px 18px',
         border: '2px solid #fbbf24',
       }}>
         <button
@@ -3190,60 +3298,67 @@ const DemoTour = () => {
           onClick={close}
           style={{
             position: 'absolute',
-            top: '10px',
-            right: '14px',
+            top: '8px',
+            right: '12px',
             background: 'transparent',
             border: 'none',
-            fontSize: '13px',
+            fontSize: '12px',
             color: '#94a3b8',
             cursor: 'pointer',
             fontWeight: 500,
           }}
-        >Skip tour ✕</button>
-        <div style={{ fontSize: '46px', textAlign: 'center', marginBottom: '6px' }}>{cur.icon}</div>
-        <h2 style={{
-          fontSize: '20px',
-          fontWeight: 700,
-          color: '#1f2937',
-          textAlign: 'center',
-          margin: '0 0 10px',
-        }}>{cur.title}</h2>
-        <p style={{
-          fontSize: '14px',
-          color: '#475569',
-          lineHeight: 1.55,
-          textAlign: 'center',
-          margin: '0 0 20px',
-        }}>{cur.body}</p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '18px' }}>
+        >Skip ✕</button>
+        <div style={{ fontSize: '34px', marginBottom: '4px' }}>{cur.icon}</div>
+        <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#1f2937', margin: '0 0 8px' }}>{cur.title}</h3>
+        <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.55, margin: '0 0 16px' }}>{cur.body}</p>
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '14px', flexWrap: 'wrap' }}>
           {steps.map((_, i) => (
             <span key={i} style={{
-              width: i === step ? '22px' : '7px',
-              height: '7px',
+              width: i === step ? '20px' : '6px',
+              height: '6px',
               borderRadius: '999px',
               background: i === step ? '#f59e0b' : '#e2e8f0',
               transition: 'all 0.25s',
             }} />
           ))}
         </div>
-        <button
-          data-testid="demo-tour-next"
-          onClick={next}
-          style={{
-            width: '100%',
-            background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
-            color: '#fff',
-            border: 'none',
-            padding: '11px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            letterSpacing: '0.3px',
-          }}
-        >{isLast ? "Let's go 🚀" : `Next — ${step + 1} / ${steps.length}`}</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {!isFirst && (
+            <button
+              data-testid="demo-tour-back"
+              onClick={prev}
+              style={{
+                flex: '0 0 auto',
+                background: '#f1f5f9',
+                color: '#475569',
+                border: 'none',
+                padding: '10px 14px',
+                borderRadius: '7px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >← Back</button>
+          )}
+          <button
+            data-testid="demo-tour-next"
+            onClick={next}
+            style={{
+              flex: 1,
+              background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+              color: '#fff',
+              border: 'none',
+              padding: '10px',
+              borderRadius: '7px',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              letterSpacing: '0.3px',
+            }}
+          >{isLast ? "Let's go 🚀" : `Next → ${step + 1} / ${steps.length}`}</button>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
