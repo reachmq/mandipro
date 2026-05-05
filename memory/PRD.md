@@ -25,6 +25,7 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 - Bepaari Aakda (Settlement Slip) - Daily settlement calculations per Bepaari with print functionality
 - Adjustments / Journal Voucher (JV) for triangular settlements
 - Balance Transfer module for moving balances between parties
+- **DEMO MODE / Multi-tenant Foundation (Feb 2026)** — `demo@mandipro.in` user with isolated MongoDB database (`<DB_NAME>_demo`). Complete data isolation: demo cannot see admin data, admin cannot see demo data. Yellow demo banner + Reset Demo Data button. Login page has "Try Demo Account" auto-fill. Critical bug fixed during build: `_TenantDBProxy` needed `__getitem__` (not just `__getattr__`) for cash-book/adjustment POSTs that use bracket access.
 
 ---
 
