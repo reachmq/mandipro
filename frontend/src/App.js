@@ -676,7 +676,7 @@ const CashBook = () => {
 
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
   const subTypes = {
-    BEPAARI: ["PAYMENT", "MOTOR", "BHUSSA", "GAWALI", "CASH_ADV"],
+    BEPAARI: ["PAYMENT", "DAILY_EXPENSES", "MOTOR", "BHUSSA", "GAWALI", "CASH_ADV"],
     DUKANDAR: ["RECEIPT", "REFUND"],
     CAPITAL: ["TAKEN", "REPAID", "WITHDRAWN"],
     LOAN: ["TAKEN", "REPAID"],
@@ -686,6 +686,9 @@ const CashBook = () => {
     ZAKAT: ["PROVISION", "PAID"]
   };
   const modes = ["CASH", "BANK", "UPI", "TRANSFER"];
+
+  // Composite expense fields (only used when sub_type === "DAILY_EXPENSES")
+  const [dailyExp, setDailyExp] = useState({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
 
   const fetchData = async () => {
     try {
@@ -729,6 +732,36 @@ const CashBook = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Special composite: DAILY_EXPENSES splits into 3 separate cash_book entries (Motor/Bhussa/Gawali)
+    if (form.type === "BEPAARI" && form.sub_type === "DAILY_EXPENSES") {
+      const items = [
+        { sub_type: "MOTOR", amount: parseFloat(dailyExp.motor || 0) },
+        { sub_type: "BHUSSA", amount: parseFloat(dailyExp.bhussa || 0) },
+        { sub_type: "GAWALI", amount: parseFloat(dailyExp.gawali || 0) },
+        { sub_type: "CASH_ADV", amount: parseFloat(dailyExp.cash_adv || 0) },
+      ].filter(i => i.amount > 0);
+      if (items.length === 0) {
+        alert("Enter at least one of Motor / Bhussa / Gawali / Cash Adv");
+        return;
+      }
+      // Create entries sequentially so a failure on one doesn't leave gaps unaccounted
+      for (const it of items) {
+        await axios.post(`${API}/cash-book`, {
+          date: form.date,
+          type: "BEPAARI",
+          sub_type: it.sub_type,
+          party_id: form.party_id,
+          amount: it.amount,
+          bf_disc: 0,
+          mode: form.mode,
+          particulars: form.particulars || "",
+        });
+      }
+      setDailyExp({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
+      setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
+      fetchData();
+      return;
+    }
     await axios.post(`${API}/cash-book`, { 
       ...form, 
       amount: parseFloat(form.amount),
@@ -799,6 +832,7 @@ const CashBook = () => {
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
+  const showDailyExp = form.type === "BEPAARI" && form.sub_type === "DAILY_EXPENSES";
 
   // ===== Live Cash & Bank summary (mirrors backend balance-sheet logic) =====
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
@@ -942,7 +976,15 @@ const CashBook = () => {
           disabled={!form.type}
           testId="cb-party-select"
         />
-        <input type="number" placeholder="Amount (Full Payable)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+        <input type="number" placeholder="Amount (Full Payable)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required={!showDailyExp} disabled={showDailyExp} style={showDailyExp ? {display: 'none'} : {}} />
+        {showDailyExp && (
+          <>
+            <input type="number" placeholder="Motor" value={dailyExp.motor} onChange={(e) => setDailyExp({ ...dailyExp, motor: e.target.value })} style={{maxWidth: '100px'}} data-testid="cb-motor-input" />
+            <input type="number" placeholder="Bhussa" value={dailyExp.bhussa} onChange={(e) => setDailyExp({ ...dailyExp, bhussa: e.target.value })} style={{maxWidth: '100px'}} data-testid="cb-bhussa-input" />
+            <input type="number" placeholder="Gawali" value={dailyExp.gawali} onChange={(e) => setDailyExp({ ...dailyExp, gawali: e.target.value })} style={{maxWidth: '100px'}} data-testid="cb-gawali-input" />
+            <input type="number" placeholder="Cash Adv" value={dailyExp.cash_adv} onChange={(e) => setDailyExp({ ...dailyExp, cash_adv: e.target.value })} style={{maxWidth: '100px'}} data-testid="cb-cashadv-input" />
+          </>
+        )}
         {showBfDisc && (
           <input 
             type="number" 
@@ -1753,7 +1795,23 @@ const PartyStatement = () => {
       const jbRate = settings.jb_rate ?? 10;
       const kkFixed = settings.kk_fixed ?? 100;
 
-      // Add NET sales entries per date (only Comm/JB/KK netted off; other cash expenses appear as separate dated lines below for audit)
+      // Group same-date Motor/Bhussa/Gawali expenses so they net into the Sales line
+      // (Cash Advances and Payments stay as their own dated lines — they're not "deductions on sale")
+      const SAME_DAY_DEDUCTIONS = ["MOTOR", "BHUSSA", "GAWALI"];
+      const expensesByDate = {};
+      statement.cash_entries.forEach(c => {
+        if (SAME_DAY_DEDUCTIONS.includes(c.sub_type)) {
+          if (!expensesByDate[c.date]) expensesByDate[c.date] = { motor: 0, bhussa: 0, gawali: 0, total: 0 };
+          const key = c.sub_type.toLowerCase();
+          expensesByDate[c.date][key] += c.amount;
+          expensesByDate[c.date].total += c.amount;
+        }
+      });
+
+      // Add NET sales entries per date (Comm/JB/KK + same-day Motor/Bhussa/Gawali netted off)
+      // Track which dates had a sale so we can distinguish "same-day deduction" (netted) from
+      // "deduction on a non-sale date" (kept as a separate debit line)
+      const saleDates = new Set(Object.keys(salesByDate));
       Object.keys(salesByDate).sort().forEach(date => {
         const s = salesByDate[date];
         const commission = flatRate
@@ -1761,19 +1819,40 @@ const PartyStatement = () => {
           : s.gross * (commissionRate / 100);
         const jb = s.qty * jbRate;
         const kk = kkFixed; // Per market day
-        const netAmount = s.gross - commission - jb - kk;
+        const exp = expensesByDate[date] || { motor: 0, bhussa: 0, gawali: 0, total: 0 };
+        const netAmount = s.gross - commission - jb - kk - exp.total;
+
+        // Build a clean inclusive description showing what was netted
+        const deductedHeads = ["Comm", "JB", "KK"];
+        if (exp.motor > 0) deductedHeads.push("Motor");
+        if (exp.gawali > 0) deductedHeads.push("Gawali");
+        if (exp.bhussa > 0) deductedHeads.push("Bhussa");
+
+        // Inclusive sub-text: small grey breakdown so audit detail is preserved
+        const inclParts = [
+          `Comm ${formatCurrency(commission)}`,
+          `JB ${formatCurrency(jb)}`,
+          `KK ${formatCurrency(kk)}`,
+        ];
+        if (exp.motor > 0) inclParts.push(`Motor ${formatCurrency(exp.motor)}`);
+        if (exp.gawali > 0) inclParts.push(`Gawali ${formatCurrency(exp.gawali)}`);
+        if (exp.bhussa > 0) inclParts.push(`Bhussa ${formatCurrency(exp.bhussa)}`);
 
         entries.push({
           date: date,
-          description: `Sales (${s.qty} pcs) - Net of Comm/JB/KK`,
+          description: `Sales (${s.qty} pcs) - Net of ${deductedHeads.join('/')}`,
+          subDescription: `incl. ${inclParts.join(' · ')}`,
           debit: 0,
           credit: netAmount,
           type: 'sale'
         });
       });
 
-      // Add ALL non-PAYMENT cash entries (MOTOR/BHUSSA/GAWALI/CASH_ADV) as separate debit lines on their own date
-      // Critical: these reduce our payable to the bepaari, so they MUST appear regardless of whether sales happened that day
+      // Add cash entries:
+      //  - PAYMENT → debit line (we paid the bepaari)
+      //  - CASH_ADV → debit line (bepaari took cash advance)
+      //  - MOTOR/BHUSSA/GAWALI on a SALE date → already netted above, skip here
+      //  - MOTOR/BHUSSA/GAWALI on a NON-sale date → still show as standalone debit
       statement.cash_entries.forEach(c => {
         if (c.sub_type === "PAYMENT") {
           entries.push({
@@ -1783,6 +1862,9 @@ const PartyStatement = () => {
             credit: 0,
             type: 'cash'
           });
+        } else if (SAME_DAY_DEDUCTIONS.includes(c.sub_type) && saleDates.has(c.date)) {
+          // already absorbed into the Sales line for that date
+          return;
         } else {
           entries.push({
             date: c.date,
@@ -1997,7 +2079,7 @@ const PartyStatement = () => {
             ${ledgerEntries.map(e => `
               <tr${e.infoOnly ? ' style="color:#999;font-style:italic"' : ''}>
                 <td>${fmtDate(e.date)}</td>
-                <td>${e.description}${e.infoOnly ? ` (${e.transferAmount.toLocaleString('en-IN')} — already in opening bal.)` : ''}</td>
+                <td>${e.description}${e.infoOnly ? ` (${e.transferAmount.toLocaleString('en-IN')} — already in opening bal.)` : ''}${e.subDescription ? `<div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:2px">${e.subDescription}</div>` : ''}</td>
                 <td>${e.debit > 0 ? e.debit.toLocaleString('en-IN') : '-'}</td>
                 <td>${e.credit > 0 ? e.credit.toLocaleString('en-IN') : '-'}</td>
                 <td>${e.balance.toLocaleString('en-IN')}</td>
@@ -2093,7 +2175,10 @@ const PartyStatement = () => {
                 {ledgerEntries.map((e, i) => (
                   <tr key={i} className={e.type === 'sale' ? 'sale-row' : e.type === 'adjustment' ? 'adjustment-row' : e.type === 'transfer' ? 'transfer-info-row' : ''}>
                     <td>{fmtDate(e.date)}</td>
-                    <td>{e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — already in opening bal.)</span>}</td>
+                    <td>
+                      {e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — already in opening bal.)</span>}
+                      {e.subDescription && <div style={{fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontStyle: 'italic'}}>{e.subDescription}</div>}
+                    </td>
                     <td>{e.debit > 0 ? formatCurrency(e.debit) : "-"}</td>
                     <td>{e.credit > 0 ? formatCurrency(e.credit) : "-"}</td>
                     <td className={e.balance >= 0 ? "positive" : "negative"}>{formatCurrency(e.balance)}</td>
@@ -2125,7 +2210,10 @@ const PartyStatement = () => {
                   <span className="stmt-mobile-date">{fmtDate(e.date)}</span>
                   <span className={`stmt-mobile-bal ${e.balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(e.balance)}</span>
                 </div>
-                <div className="stmt-mobile-desc">{e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — in opening)</span>}</div>
+                <div className="stmt-mobile-desc">
+                  {e.description}{e.infoOnly && <span className="transfer-note"> ({formatCurrency(e.transferAmount)} — in opening)</span>}
+                  {e.subDescription && <div style={{fontSize: '10.5px', color: '#94a3b8', marginTop: '2px', fontStyle: 'italic', lineHeight: 1.4}}>{e.subDescription}</div>}
+                </div>
                 <div className="stmt-mobile-amounts">
                   {e.debit > 0 && <span className="stmt-debit">{partyType === "bepaari" ? "Dr (-)" : "Dr (+)"} {formatCurrency(e.debit)}</span>}
                   {e.credit > 0 && <span className="stmt-credit">{partyType === "bepaari" ? "Cr (+)" : "Cr (-)"} {formatCurrency(e.credit)}</span>}

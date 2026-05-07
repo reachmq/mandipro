@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the new Cash Book DAILY_EXPENSES composite feature and the Party Statement Motor/Bhussa/Gawali netting feature end-to-end. ALL 9 backend tests pass + 4 frontend UI checks pass. The critical math invariant (closing balance from raw /api/party-statement data == /api/bepaari-ledger 'balance') is verified to within Re 1 — the netting refactor is purely a presentation change with zero impact on totals. Backend cash-book POST regression (MOTOR/BHUSSA/GAWALI/CASH_ADV/PAYMENT for BEPAARI) all succeed. Frontend confirms: (a) 4 inline inputs hidden by default, (b) appear after Type=BEPAARI + Sub=DAILY_EXPENSES, (c) single Amount input is hidden in this mode, (d) submitting all 4 blank shows correct alert 'Enter at least one of Motor / Bhussa / Gawali / Cash Adv'. Tenant isolation regression verified: admin still has 25 bepaaris incl. JUNAID, no TEST_NetBepaari leak. Demo tenant reset at start AND end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cashbook_daily_expenses.py",
+    "/app/test_reports/pytest/pytest_daily_expenses.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "buildLedgerEntries netting logic (App.js 1798-1877): SAME_DAY_DEDUCTIONS is hardcoded to ['MOTOR','BHUSSA','GAWALI']; CASH_ADV intentionally excluded. The deductedHeads pushes 'Motor', 'Gawali', 'Bhussa' in that order while the description prefix is 'Comm/JB/KK' — produces 'Sales (32 pcs) - Net of Comm/JB/KK/Motor/Gawali/Bhussa'. The problem statement expected order Motor/Gawali/Bhussa which matches code. OK.",
+    "subDescription italic grey text uses inline style `incl. Comm X · JB Y · KK Z · Motor M · Gawali G · Bhussa B` — preserved audit detail. Verified the rendering is wired in 3 places: desktop table (line 2173-2185), mobile cards (2202-2213), and print/PDF (2080). Good coverage.",
+    "handleSubmit DAILY_EXPENSES path (App.js 736-764) does 4 sequential `await axios.post`s — if the 3rd one fails, the first two are already persisted and the 4th never runs, creating partial state. Recommend wrapping in a backend bulk endpoint (e.g. POST /api/cash-book/bulk) or at least catching errors and rolling back. Not blocking for current iteration but worth a follow-up ticket.",
+    "form.amount has `required={!showDailyExp}` and `disabled={showDailyExp}` (line 979) — clean. mode/date/party_id are still required at HTML5 level when DAILY_EXPENSES is active, so the alert path fires only after browser-side validation passes.",
+    "Backend has zero changes for these features — verified by inspection of /api/cash-book POST handler at server.py:607-637. Good — the netting is a pure UI invariant.",
+    "server.py is now 2358 lines. Same comment as iteration 5 — modular split recommended post-launch. Not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cashbook_daily_expenses.py (new — 9 tests covering subtype POST regression, math invariant, breakdown components, tenant isolation)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 passed)",
+    "frontend": "100% (4/4 UI checks: hidden by default → 4 inputs visible after DAILY_EXPENSES → Amount input hidden → blank-submit alert text correct)"
+  },
+  "test_credentials": "admin@mandi.com / mandi@2026 (READ-ONLY for regression); demo@mandipro.in / demo@2026 (mutated, then reset)",
+  "seed_data_creation": "DEMO TENANT only: 1 bepaari (TEST_NetBepaari), 1 dukandar (TEST_NetDukandar), 1 daily-sale (32 pcs @ 10000 = 320000 gross, 4% commission), 11 cash-book entries (5 from parametrized subtype test + 5 same-day from netting test + 1 non-sale-date Motor on 2026-05-03). All wiped via /api/demo/reset. Admin tenant verified intact: 25 bepaaris, JUNAID present, no TEST_NetBepaari residue.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_cashbook_daily_expenses.py is reusable. Key invariant test: TestNettingMathInvariant::test_party_statement_and_aakda_agree compares raw /api/party-statement-derived closing vs /api/bepaari-ledger 'balance' field — they must agree to within Re 1. If this ever fails, the netting refactor in buildLedgerEntries (App.js 1755-1880) has drifted from the backend's authoritative computation in /api/bepaari-ledger (server.py 990-1053). The frontend netting is purely cosmetic — backend totals are the source of truth. UI selectors confirmed: data-testid='cb-motor-input', 'cb-bhussa-input', 'cb-gawali-input', 'cb-cashadv-input', 'cb-party-select', sidebar nav uses text 'Cash & Bank' (no data-testid yet — minor improvement opportunity). Demo tour modal appears on every demo login — script must click 'Skip' before proceeding.",
+  "rca of the issue": "No bugs found. Both features (DAILY_EXPENSES composite Cash Book entry + Party Statement Motor/Bhussa/Gawali netting) are implemented correctly. The math invariant — that closing balance is unchanged regardless of how same-day expenses are presented in the ledger view — is rigorously verified by comparing /api/party-statement (raw data) summed locally with the same arithmetic, against /api/bepaari-ledger.balance (server's authoritative value). Both produce identical results, confirming the frontend netting is a presentation-only refactor."
+}
