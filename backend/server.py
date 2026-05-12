@@ -1634,6 +1634,51 @@ async def get_balance_transfers(
     return serialize_docs(transfers)
 
 
+# ============== DELETE BALANCE TRANSFER ==============
+@api_router.delete("/balance-transfer/{transfer_id}")
+async def delete_balance_transfer(transfer_id: str, reverse: bool = False, user: dict = Depends(get_current_user)):
+    """Delete a balance-transfer audit record.
+    - reverse=false (default): remove the record only — use this when opening balances were already manually corrected in Masters.
+    - reverse=true: also reverse the opening_balance changes that this transfer made (UNDO the transfer completely).
+    """
+    transfer = await db.balance_transfers.find_one({"id": transfer_id})
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer record not found")
+
+    if reverse:
+        type_to_collection = {
+            "BEPAARI": "bepaaris",
+            "DUKANDAR": "dukandars",
+            "ADVANCE": "advance_parties",
+        }
+        from_coll = type_to_collection.get(transfer.get("from_type"))
+        to_coll = type_to_collection.get(transfer.get("to_type"))
+        amount = float(transfer.get("amount", 0))
+        if from_coll:
+            from_party = await db[from_coll].find_one({"id": transfer.get("from_party_id")})
+            if from_party:
+                await db[from_coll].update_one(
+                    {"id": transfer.get("from_party_id")},
+                    {"$set": {"opening_balance": from_party.get("opening_balance", 0) + amount}},
+                )
+        if to_coll:
+            to_party = await db[to_coll].find_one({"id": transfer.get("to_party_id")})
+            if to_party:
+                await db[to_coll].update_one(
+                    {"id": transfer.get("to_party_id")},
+                    {"$set": {"opening_balance": to_party.get("opening_balance", 0) - amount}},
+                )
+
+    await db.balance_transfers.delete_one({"id": transfer_id})
+    await log_activity(
+        "balance_transfers", transfer_id, "DELETE",
+        serialize_doc(dict(transfer)), {},
+        summary=f"Balance Transfer DELETED {'(reversed)' if reverse else '(record only)'}: {transfer.get('from_party_name')} → {transfer.get('to_party_name')} ₹{transfer.get('amount')}",
+        user_email=user.get("email", "unknown"),
+    )
+    return {"status": "deleted", "reversed": reverse}
+
+
 @api_router.post("/balance-transfers/backfill")
 async def backfill_balance_transfer(data: dict):
     """Create a transfer record for past transfers (audit trail backfill - does NOT modify balances)"""

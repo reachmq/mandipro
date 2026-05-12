@@ -1500,6 +1500,7 @@ const BalanceTransfer = () => {
   const [dukandars, setDukandars] = useState([]);
   const [advanceParties, setAdvanceParties] = useState([]);
   const [cashBookEntries, setCashBookEntries] = useState([]);
+  const [pastTransfers, setPastTransfers] = useState([]);
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     from_type: "DUKANDAR",
@@ -1517,14 +1518,16 @@ const BalanceTransfer = () => {
 
   const fetchData = async () => {
     try {
-      const [bRes, dRes, aRes] = await Promise.all([
+      const [bRes, dRes, aRes, tRes] = await Promise.all([
         axios.get(`${API}/bepaaris`),
         axios.get(`${API}/dukandars`),
-        axios.get(`${API}/advance-parties`)
+        axios.get(`${API}/advance-parties`),
+        axios.get(`${API}/balance-transfers`)
       ]);
       setBeparis(bRes.data);
       setDukandars(dRes.data);
       setAdvanceParties(aRes.data);
+      setPastTransfers(tRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -1698,6 +1701,70 @@ const BalanceTransfer = () => {
       )}
 
       <button className="btn-primary btn-transfer" onClick={handleTransfer}>Transfer Balance</button>
+
+      {/* Past Balance Transfers - editable / removable */}
+      <div className="entries-section" style={{marginTop: '32px'}}>
+        <h3>Past Balance Transfers</h3>
+        <p className="hint">Use ❌ to delete an entry without touching balances (when you've already corrected them in Masters). Use ↩️ to UNDO completely (reverses the opening-balance changes).</p>
+        {pastTransfers.length === 0 ? (
+          <p className="hint" style={{fontStyle:'italic'}}>No past balance transfers.</p>
+        ) : (
+          <div style={{overflowX: 'auto'}}>
+            <table className="data-table" data-testid="past-transfers-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th style={{textAlign:'right'}}>Amount</th>
+                  <th>Narration</th>
+                  <th style={{textAlign:'center'}}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pastTransfers.map(t => (
+                  <tr key={t.id}>
+                    <td>{fmtDate(t.date)}</td>
+                    <td>{t.from_party_name}</td>
+                    <td>{t.to_party_name}</td>
+                    <td style={{textAlign:'right'}}>{formatCurrency(t.amount)}</td>
+                    <td>{t.narration || '-'}</td>
+                    <td style={{textAlign:'center', whiteSpace:'nowrap'}}>
+                      <button
+                        data-testid={`bt-delete-record-${t.id}`}
+                        className="btn-delete"
+                        title="Delete record only (opening balances stay as they are now)"
+                        onClick={async () => {
+                          if (!window.confirm(`Remove this transfer record?\n\n${t.from_party_name} → ${t.to_party_name} ₹${t.amount.toLocaleString()}\n\nThis ONLY removes the audit record. Opening balances of both parties stay AS THEY ARE NOW. Use this if you've already corrected the balances manually in Masters.`)) return;
+                          try {
+                            await axios.delete(`${API}/balance-transfer/${t.id}?reverse=false`);
+                            setMessage(`✅ Transfer record removed.`);
+                            fetchData();
+                          } catch (err) { alert("Error: " + (err.response?.data?.detail || err.message)); }
+                        }}
+                        style={{marginRight: '6px'}}
+                      >❌ Remove</button>
+                      <button
+                        data-testid={`bt-undo-${t.id}`}
+                        className="btn-secondary"
+                        title="Undo: reverses the opening balance changes that this transfer made"
+                        onClick={async () => {
+                          if (!window.confirm(`UNDO this transfer completely?\n\n${t.from_party_name} → ${t.to_party_name} ₹${t.amount.toLocaleString()}\n\nThis will REVERSE the opening balance changes (add ₹${t.amount.toLocaleString()} back to ${t.from_party_name}, subtract from ${t.to_party_name}) AND remove the record. Only use this if you have NOT yet manually adjusted the Masters opening balances.`)) return;
+                          try {
+                            await axios.delete(`${API}/balance-transfer/${t.id}?reverse=true`);
+                            setMessage(`✅ Transfer UNDONE (opening balances reversed).`);
+                            fetchData();
+                          } catch (err) { alert("Error: " + (err.response?.data?.detail || err.message)); }
+                        }}
+                      >↩️ Undo</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
