@@ -824,34 +824,31 @@ async def get_party_statement(
 
     def _dukandar_ledger_effect(a, party_id):
         """Return (ledger_debit, ledger_credit, effect_label) for a JV affecting a Dukandar.
-        Dukandar is a RECEIVABLE account: 'Debit column INCREASES receivable, Credit column REDUCES receivable.'
-        In the statement display we follow accounting convention where higher receivable = debit balance.
-        The party-statement code below converts these to running balance directly.
-        For dukandar display: receipts go to 'Debit' column (reducing balance), purchases to 'Credit'.
-        Actually statements use: debit = reduces balance, credit = increases balance (Bepaari convention).
-        Let's keep the same column semantics: debit = REDUCES balance, credit = INCREASES balance."""
-        # For dukandar, "balance" = positive when they owe us. Debit column reduces their debt.
+        Dukandar = receivable account. In statement: DEBIT column INCREASES receivable, CREDIT column REDUCES it.
+        (running balance formula: balance += debit - credit)
+        """
         if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id:
             other = a.get("credit_type")
             if other in PAYABLE_TYPES:
-                # Dukandar paid Bepaari on our behalf → REDUCES receivable
-                return a["amount"], 0, f"Paid to {a.get('credit_party_name','')}"
+                # Dukandar paid a Bepaari/etc on our behalf → REDUCES receivable → CREDIT col
+                return 0, a["amount"], f"Paid to {a.get('credit_party_name','')}"
             elif other in RECEIVABLE_TYPES:
-                # Transfer OUT to another receivable → REDUCES our receivable from this dukandar
-                return a["amount"], 0, f"Balance transferred to {a.get('credit_party_name','')}"
+                # Transfer OUT to another receivable → REDUCES this dukandar's receivable → CREDIT col
+                return 0, a["amount"], f"Balance transferred to {a.get('credit_party_name','')}"
             elif other in EXPENSE_HEADS:
-                return a["amount"], 0, f"Written off to {other}"
+                # Uncommon: dukandar credit to expense → REDUCES receivable → CREDIT col
+                return 0, a["amount"], f"Adjusted to {other}"
         if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id:
             other = a.get("debit_type")
             if other in RECEIVABLE_TYPES:
-                # Transfer IN from another receivable → INCREASES our receivable from this dukandar
-                return 0, a["amount"], f"Balance transferred from {a.get('debit_party_name','')}"
+                # Transfer IN from another receivable → INCREASES this dukandar's receivable → DEBIT col
+                return a["amount"], 0, f"Balance transferred from {a.get('debit_party_name','')}"
             elif other in PAYABLE_TYPES:
-                # Uncommon → INCREASES receivable
-                return 0, a["amount"], f"Adjustment with {a.get('debit_party_name','')}"
+                # Uncommon: payable→dukandar → INCREASES receivable → DEBIT col
+                return a["amount"], 0, f"Adjustment with {a.get('debit_party_name','')}"
             elif other in EXPENSE_HEADS:
-                # Write-off (legacy) → REDUCES receivable
-                return a["amount"], 0, f"Written off to {other}"
+                # Write-off (legacy: expense head debits dukandar credits) → REDUCES receivable → CREDIT col
+                return 0, a["amount"], f"Written off to {other}"
         return None
 
     # Filter adjustments for this party (as either debit or credit) with PROPER directional ledger effect
