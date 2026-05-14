@@ -2397,13 +2397,14 @@ const PartyStatement = () => {
               type: 'adjustment'
             });
           } else {
-            // Party-to-party: CREDIT = someone paid them (reduces payable) -> Debit in running bal
-            // DEBIT = they paid someone -> Credit in running bal
+            // Use backend-computed directional debit/credit when available (new universal logic).
+            // Falls back to legacy direction-based interpretation if backend hasn't provided them.
+            const hasNew = a.ledger_debit !== undefined || a.ledger_credit !== undefined;
             entries.push({
               date: a.date,
               description: `JV: ${a.effect}`,
-              debit: a.direction === "CREDIT" ? a.amount : 0,  // CREDIT from party = reduces payable = debit col
-              credit: a.direction === "DEBIT" ? a.amount : 0,
+              debit: hasNew ? (a.ledger_debit || 0) : (a.direction === "CREDIT" ? a.amount : 0),
+              credit: hasNew ? (a.ledger_credit || 0) : (a.direction === "DEBIT" ? a.amount : 0),
               type: 'adjustment'
             });
           }
@@ -2418,13 +2419,12 @@ const PartyStatement = () => {
               type: 'adjustment'
             });
           } else {
-            // Dukandar: DEBIT = they paid someone (reduces debt) -> Credit in ledger
-            // CREDIT from party = increases debt -> Debit in ledger
+            const hasNew = a.ledger_debit !== undefined || a.ledger_credit !== undefined;
             entries.push({
               date: a.date,
               description: `JV: ${a.effect}`,
-              debit: a.direction === "CREDIT" ? a.amount : 0,
-              credit: a.direction === "DEBIT" ? a.amount : 0,
+              debit: hasNew ? (a.ledger_debit || 0) : (a.direction === "CREDIT" ? a.amount : 0),
+              credit: hasNew ? (a.ledger_credit || 0) : (a.direction === "DEBIT" ? a.amount : 0),
               type: 'adjustment'
             });
           }

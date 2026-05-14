@@ -790,33 +790,95 @@ async def get_party_statement(
     
     all_adjustments = serialize_docs(await db.adjustments.find(adj_query).sort("date", 1).to_list(5000))
     
-    # Filter adjustments for this party (as either debit or credit)
+    # Define type groupings for directional ledger effect computation
+    RECEIVABLE_TYPES = ["DUKANDAR", "ADVANCE"]
+    PAYABLE_TYPES = ["BEPAARI", "CAPITAL", "LOAN", "AMANAT"]
+    EXPENSE_HEADS = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
+
+    def _bepaari_ledger_effect(a, party_id):
+        """Return (ledger_debit, ledger_credit, effect_label) for a JV affecting a Bepaari.
+        Bepaari is a PAYABLE account: 'Debit column reduces payable, Credit column increases payable.'"""
+        if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id:
+            other = a.get("debit_type")
+            if other in RECEIVABLE_TYPES:
+                # Someone (Dukandar/Advance) paid this bepaari on our behalf → reduce our payable
+                return a["amount"], 0, f"Received payment from {a.get('debit_party_name','')}"
+            elif other in PAYABLE_TYPES:
+                # Transfer IN from another payable party → INCREASES our payable to this bepaari
+                return 0, a["amount"], f"Balance transferred from {a.get('debit_party_name','')}"
+            elif other in EXPENSE_HEADS:
+                # Expense added to bepaari's account → INCREASES payable (legacy convention)
+                return 0, a["amount"], f"Added to payable from {other}"
+        if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id:
+            other = a.get("credit_type")
+            if other in PAYABLE_TYPES:
+                # Transfer OUT to another payable party → REDUCES our payable to this bepaari
+                return a["amount"], 0, f"Balance transferred to {a.get('credit_party_name','')}"
+            elif other in EXPENSE_HEADS:
+                # Write-off to expense → REDUCES our payable
+                return a["amount"], 0, f"Written off to {other}"
+            elif other in RECEIVABLE_TYPES:
+                # Uncommon → INCREASES payable
+                return 0, a["amount"], f"Adjustment with {a.get('credit_party_name','')}"
+        return None
+
+    def _dukandar_ledger_effect(a, party_id):
+        """Return (ledger_debit, ledger_credit, effect_label) for a JV affecting a Dukandar.
+        Dukandar is a RECEIVABLE account: 'Debit column INCREASES receivable, Credit column REDUCES receivable.'
+        In the statement display we follow accounting convention where higher receivable = debit balance.
+        The party-statement code below converts these to running balance directly.
+        For dukandar display: receipts go to 'Debit' column (reducing balance), purchases to 'Credit'.
+        Actually statements use: debit = reduces balance, credit = increases balance (Bepaari convention).
+        Let's keep the same column semantics: debit = REDUCES balance, credit = INCREASES balance."""
+        # For dukandar, "balance" = positive when they owe us. Debit column reduces their debt.
+        if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id:
+            other = a.get("credit_type")
+            if other in PAYABLE_TYPES:
+                # Dukandar paid Bepaari on our behalf → REDUCES receivable
+                return a["amount"], 0, f"Paid to {a.get('credit_party_name','')}"
+            elif other in RECEIVABLE_TYPES:
+                # Transfer OUT to another receivable → REDUCES our receivable from this dukandar
+                return a["amount"], 0, f"Balance transferred to {a.get('credit_party_name','')}"
+            elif other in EXPENSE_HEADS:
+                return a["amount"], 0, f"Written off to {other}"
+        if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id:
+            other = a.get("debit_type")
+            if other in RECEIVABLE_TYPES:
+                # Transfer IN from another receivable → INCREASES our receivable from this dukandar
+                return 0, a["amount"], f"Balance transferred from {a.get('debit_party_name','')}"
+            elif other in PAYABLE_TYPES:
+                # Uncommon → INCREASES receivable
+                return 0, a["amount"], f"Adjustment with {a.get('debit_party_name','')}"
+            elif other in EXPENSE_HEADS:
+                # Write-off (legacy) → REDUCES receivable
+                return a["amount"], 0, f"Written off to {other}"
+        return None
+
+    # Filter adjustments for this party (as either debit or credit) with PROPER directional ledger effect
+    party_adjustments = []
     if party_type == "bepaari":
-        # For Bepaari: CREDIT side means someone paid them (reduces our payable)
-        party_adjustments = [
-            {**a, "direction": "CREDIT", "effect": "Received payment from " + a["debit_party_name"]}
-            for a in all_adjustments 
-            if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id
-        ]
-        # Also check if Bepaari is on DEBIT side (rare, but possible)
-        party_adjustments += [
-            {**a, "direction": "DEBIT", "effect": "Paid to " + a["credit_party_name"]}
-            for a in all_adjustments 
-            if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == party_id
-        ]
+        for a in all_adjustments:
+            eff = _bepaari_ledger_effect(a, party_id)
+            if eff is None:
+                continue
+            ld, lc, label = eff
+            # Keep legacy `direction` for backward compat with downstream code (CSV export etc.)
+            if (a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == party_id):
+                direction = "CREDIT"
+            else:
+                direction = "DEBIT"
+            party_adjustments.append({**a, "direction": direction, "effect": label, "ledger_debit": ld, "ledger_credit": lc})
     else:
-        # For Dukandar: DEBIT side means they paid someone on our behalf (reduces their receivable)
-        party_adjustments = [
-            {**a, "direction": "DEBIT", "effect": "Paid to " + a["credit_party_name"]}
-            for a in all_adjustments 
-            if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id
-        ]
-        # Also check if Dukandar is on CREDIT side (rare)
-        party_adjustments += [
-            {**a, "direction": "CREDIT", "effect": "Received payment from " + a["debit_party_name"]}
-            for a in all_adjustments 
-            if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == party_id
-        ]
+        for a in all_adjustments:
+            eff = _dukandar_ledger_effect(a, party_id)
+            if eff is None:
+                continue
+            ld, lc, label = eff
+            if (a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == party_id):
+                direction = "DEBIT"
+            else:
+                direction = "CREDIT"
+            party_adjustments.append({**a, "direction": direction, "effect": label, "ledger_debit": ld, "ledger_credit": lc})
     
     # Get balance transfers where this party is involved (FROM or TO)
     transfer_query = {"$or": [{"from_party_id": party_id}, {"to_party_id": party_id}]}
