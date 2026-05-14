@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the new 6-case directional JV (Adjustments) handling in bepaari_ledger / dukandar_ledger + Cash & Bank inline balance hint + Adjustments Quick Mode UI redesign + Balance Transfer nav hidden. ALL 9 backend pytest cases pass (3 admin-untouched regression + 6 directional JV scenarios covering B->B, D->D, legacy D->B, new B writeoff, legacy MANDI_EXP->B add, legacy MANDI_EXP->D writeoff). FRONTEND: all 12 UI checks pass — Cash & Bank inline payable/receivable hint with Pay Full / Receive Full button works correctly, button fills amount field exactly to balance, no hint for CAPITAL (non-Bepaari/Dukandar) type, all 5 Quick Mode tabs (move/writeoff/cash_diff/provision/advanced) render with correct data-testids, MOVE cross-type validation alert fires with exact expected text ('Move between different party types is not allowed here. For cross-type adjustments...'), Balance Transfer sidebar nav link is hidden. Admin tenant byte-identical: 25 bepaaris, JUNAID present, BS diff = 0. Math invariant verified: BS diff DELTA == 0 after each JV (started balanced w/r/t seed data, must stay balanced).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_jv_directional.py",
+    "/app/test_reports/pytest/pytest_jv_directional.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend ledger logic (server.py 1019-1062 bepaari, 1121-1164 dukandar) cleanly decomposes JV adjustments into 3 directional groupings (RECEIVABLE_TYPES, PAYABLE_TYPES, expense_heads) with explicit sign rules per case. The 6-case truth table for BEPAARI matches expected behavior: credit-side+receivable=-A, credit-side+payable=+A (NEW), credit-side+expense=+A (LEGACY), debit-side+receivable=+A, debit-side+payable=-A (NEW), debit-side+expense=-A (NEW writeoff). Mirror logic for DUKANDAR is the sign-inverted equivalent and behaves correctly. Solid math.",
+    "Backwards-compat legacy aliases (adj_credit_party, adj_credit_expense for bepaari; adj_debit, adj_writeoff for dukandar) are preserved at lines 1051-1052 and 1153-1154 so downstream dashboard/balance-sheet code that reads these field names doesn't break. Good.",
+    "Frontend SearchableSelect components for jv-q-reduce-party / jv-q-increase-party / jv-q-writeoff-party are conditionally rendered ONLY after a type select is chosen (App.js 1546, 1570, 1599) — that's correct UX but test scripts need to set type first. Worth noting in test docs.",
+    "Cash & Bank inline balance hint (App.js 988-1029) correctly limits visibility to BEPAARI/DUKANDAR types — for CAPITAL/LOAN/AMANAT etc no hint appears, matching the spec. Pay Full / Receive Full button only renders when balance > 0 AND mode is PAYMENT/RECEIPT.",
+    "buildQuickPayload same-type restriction in Quick MOVE shows correct exact alert text matching what was specified in problem statement. Cross-type cleanly routed to Advanced mode.",
+    "server.py is now 2466 lines (was 2358 at iteration 6). The continued growth without modularization is a non-blocking maintenance debt — recommend splitting ledger / balance-sheet / cash-book endpoints into separate routers post-launch."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_jv_directional.py (new — 9 tests covering all 6 directional JV scenarios + admin tenant regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 passed)",
+    "frontend": "100% (12/12 UI checks: nav hidden, Cash&Bank Bepaari hint + Pay Full + amount fill, Dukandar hint + Receive Full, no hint for CAPITAL, 5 Quick Mode tab data-testids present, Advanced shows Dr/Cr form, MOVE cross-type alert with exact expected text)"
+  },
+  "test_credentials": "admin@mandi.com / mandi@2026 (READ-ONLY regression); demo@mandipro.in / demo@2026 (mutated, reset before+after each run)",
+  "seed_data_creation": "DEMO TENANT only: 6 bepaaris (TEST_Sharif, TEST_Annu, TEST_Vinod, TEST_SharifWO, TEST_SharifLegacy, TEST_X_Bep, TEST_FE_Bep, TEST_FE_Bep2) + 4 dukandars (TEST_Yunus, TEST_Mehmood, TEST_Junaid, TEST_VinodDuk, TEST_X_Duk, TEST_FE_Duk) + 6 adjustments (one per scenario). All wiped via /api/demo/reset at end of pytest module + after each Playwright run. Admin tenant verified: 25 bepaaris incl. JUNAID, BS difference = 0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_jv_directional.py is reusable for any future JV math changes. The pattern bs_before = _bs_diff(demo) ... assert abs(_bs_diff(demo) - bs_before) < 1.0 is the correct invariant — note that absolute BS diff != 0 in demo because seed data has bepaaris/dukandars with opening_balance that lack offsetting equity/capital entries in fresh demo tenant; what matters is that any JV mutation does not CHANGE the delta (double-entry invariant). Admin BS diff IS 0 because seed includes matching capital/equity. UI selectors: jv-quick-{move,writeoff,cash_diff,provision,advanced}, jv-q-{reduce-party,increase-party,writeoff-party,writeoff-head,cash-dir,amount,save}, cb-party-balance-hint, cb-fill-full-btn, cb-party-select. SearchableSelect inner input is targetable via '[data-testid=\"X\"] input'. Cross-type Quick MOVE alert: 'Move between different party types is not allowed here. For cross-type adjustments (e.g. Dukandar pays Bepaari), use the Advanced (Dr/Cr) mode below.'",
+  "rca of the issue": "No bugs found. The 6-case directional JV refactor in bepaari_ledger/dukandar_ledger is mathematically correct: (1) same-type transfers move balance from X to Y preserving sum, (2) legacy cross-type Dukandar->Bepaari reduces both sides (settlement), (3) new write-off direction (BEPAARI on debit, MANDI_EXPENSE on credit) reduces payable, (4) legacy write-off direction (MANDI_EXPENSE on debit, BEPAARI on credit) INCREASES payable preserving byte-identical behavior for admin's live data, (5) legacy dukandar write-off (MANDI_EXPENSE debit, DUKANDAR credit) reduces receivable. All Balance Sheet deltas are zero after each mutation = double-entry preserved. Admin tenant untouched (25 bepaaris, JUNAID present, BS diff = 0). Frontend Quick Mode UI renders all expected data-testids, fill-balance button populates Amount correctly to currency-of-payable, same-type restriction in MOVE blocks cross-type with exact expected alert text."
+}

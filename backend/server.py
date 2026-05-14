@@ -1016,19 +1016,50 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         cash_adv = sum(c["amount"] for c in b_cash if c.get("sub_type") == "CASH_ADV")
         payments = sum(c["amount"] for c in b_cash if c.get("sub_type") == "PAYMENT")
         
-        # Adjustments: CREDIT to Bepaari from another PARTY = reduces our payable (someone paid them)
-        # CREDIT to Bepaari from EXPENSE HEAD = increases our payable (extra payment/write-off)
+        # Adjustments handling — covers all 6 directional cases for a Bepaari (payable account):
+        # The current app uses "cash-flow" convention: Debit = source of funds, Credit = destination.
+        # For a Bepaari (whom we owe):
+        #   • Credit-side, debit-side is RECEIVABLE party (Dukandar/Advance) → bepaari was PAID by them → reduce our payable
+        #   • Credit-side, debit-side is PAYABLE party (Bepaari/Cap/Loan/Amanat) → transfer IN to this bepaari → INCREASE our payable
+        #   • Credit-side, debit-side is EXPENSE_HEAD → expense added to bepaari's account → INCREASE our payable
+        #   • Debit-side, credit-side is RECEIVABLE party → uncommon → INCREASE our payable
+        #   • Debit-side, credit-side is PAYABLE party (transfer OUT) → REDUCE our payable
+        #   • Debit-side, credit-side is EXPENSE_HEAD (write-off OUT) → REDUCE our payable
+        RECEIVABLE_TYPES = ["DUKANDAR", "ADVANCE"]
+        PAYABLE_TYPES = ["BEPAARI", "CAPITAL", "LOAN", "AMANAT"]
         expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
-        adj_credit_party = sum(a["amount"] for a in serialize_docs(adjustments) 
-                       if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
-                       and a.get("debit_type") not in expense_heads)
-        adj_credit_expense = sum(a["amount"] for a in serialize_docs(adjustments) 
-                       if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
-                       and a.get("debit_type") in expense_heads)
+        all_adjs = serialize_docs(adjustments)
+        adj_credit_from_receivable = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
+            and a.get("debit_type") in RECEIVABLE_TYPES)
+        adj_credit_from_payable = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
+            and a.get("debit_type") in PAYABLE_TYPES)
+        adj_credit_from_expense = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]
+            and a.get("debit_type") in expense_heads)
+        adj_debit_to_receivable = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"]
+            and a.get("credit_type") in RECEIVABLE_TYPES)
+        adj_debit_to_payable = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"]
+            and a.get("credit_type") in PAYABLE_TYPES)
+        adj_debit_to_expense = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"]
+            and a.get("credit_type") in expense_heads)
+        # Backwards-compat aliases (used by dashboard summaries)
+        adj_credit_party = adj_credit_from_receivable  # legacy field
+        adj_credit_expense = adj_credit_from_expense   # legacy field
         
         total_ded = commission + kk + jb + motor + bhussa + gawali + cash_adv
         net_payable = b.get("opening_balance", 0) + gross - total_ded
-        balance = net_payable - payments - adj_credit_party + adj_credit_expense
+        balance = (net_payable - payments
+                   - adj_credit_from_receivable
+                   + adj_credit_from_payable
+                   + adj_credit_from_expense
+                   + adj_debit_to_receivable
+                   - adj_debit_to_payable
+                   - adj_debit_to_expense)
         
         ledger.append({
             "id": b["id"],
@@ -1087,18 +1118,50 @@ async def get_dukandar_ledger(as_on_date: Optional[str] = None):
         bf_disc_in_receipt = sum(c.get("bf_disc", 0) for c in d_cash if c.get("sub_type") == "RECEIPT")
         bf_disc_total = bf_disc_standalone + bf_disc_in_receipt  # For display only
         
-        # Adjustments: DEBIT to Dukandar = reduces their receivable (they paid someone on our behalf)
-        adj_debit = sum(a["amount"] for a in serialize_docs(adjustments) 
-                        if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"])
-        # Write-offs: CREDIT to Dukandar from expense head = also reduces receivable
+        # Adjustments handling — covers all 6 directional cases for a Dukandar (receivable account):
+        #   • Debit-side, credit-side is PAYABLE party (Bepaari/Cap/Loan/Amanat) → dukandar paid them for us → reduce receivable
+        #   • Debit-side, credit-side is RECEIVABLE party (Dukandar/Advance) → transfer OUT → reduce receivable
+        #   • Debit-side, credit-side is EXPENSE_HEAD → uncommon → reduce receivable
+        #   • Credit-side, debit-side is RECEIVABLE party → transfer IN → INCREASE receivable
+        #   • Credit-side, debit-side is PAYABLE party → uncommon → INCREASE receivable
+        #   • Credit-side, debit-side is EXPENSE_HEAD → write-off → reduce receivable
+        RECEIVABLE_TYPES = ["DUKANDAR", "ADVANCE"]
+        PAYABLE_TYPES = ["BEPAARI", "CAPITAL", "LOAN", "AMANAT"]
         expense_heads = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
-        adj_writeoff = sum(a["amount"] for a in serialize_docs(adjustments)
-                          if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"]
-                          and a.get("debit_type") in expense_heads)
+        all_adjs = serialize_docs(adjustments)
+        # debit_type=DUKANDAR (when this dukandar is on debit-side)
+        adj_debit_to_payable = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"]
+            and a.get("credit_type") in PAYABLE_TYPES)
+        adj_debit_to_receivable = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"]
+            and a.get("credit_type") in RECEIVABLE_TYPES)
+        adj_debit_to_expense = sum(a["amount"] for a in all_adjs
+            if a.get("debit_type") == "DUKANDAR" and a.get("debit_party_id") == d["id"]
+            and a.get("credit_type") in expense_heads)
+        # credit_type=DUKANDAR (when this dukandar is on credit-side)
+        adj_credit_from_receivable = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"]
+            and a.get("debit_type") in RECEIVABLE_TYPES)
+        adj_credit_from_payable = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"]
+            and a.get("debit_type") in PAYABLE_TYPES)
+        adj_credit_from_expense = sum(a["amount"] for a in all_adjs
+            if a.get("credit_type") == "DUKANDAR" and a.get("credit_party_id") == d["id"]
+            and a.get("debit_type") in expense_heads)
+        # Legacy aliases used by other parts of code
+        adj_debit = adj_debit_to_payable + adj_debit_to_receivable + adj_debit_to_expense
+        adj_writeoff = adj_credit_from_expense
         
         net_receivable = d.get("opening_balance", 0) + purchases - discounts
         # Refund (we paid dukandar) ADDS to balance — opposite of receipt
-        balance = net_receivable - receipts + refunds - bf_disc_standalone - adj_debit - adj_writeoff
+        balance = (net_receivable - receipts + refunds - bf_disc_standalone
+                   - adj_debit_to_payable
+                   - adj_debit_to_receivable
+                   - adj_debit_to_expense
+                   + adj_credit_from_receivable
+                   + adj_credit_from_payable
+                   - adj_credit_from_expense)
         
         # Last transaction date (for aging/overdue tracking)
         all_dates = [s["date"] for s in d_sales] + [c["date"] for c in d_cash]

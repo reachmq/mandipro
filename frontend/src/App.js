@@ -161,7 +161,7 @@ const Sidebar = () => {
     { path: "/daily-sales", label: "Daily Sales", icon: "🐐" },
     { path: "/cash-book", label: "Cash & Bank", icon: "💰" },
     { path: "/adjustments", label: "Adjustments (JV)", icon: "🔄" },
-    { path: "/balance-transfer", label: "Balance Transfer", icon: "↔️" },
+    { path: "/balance-transfer", label: "Balance Transfer", icon: "↔️", hidden: true },
     { path: "/bepaari-ledger", label: "Bepaari Ledger", icon: "📒" },
     { path: "/dukandar-ledger", label: "Dukandar Ledger", icon: "📗" },
     { path: "/balance-sheet", label: "Balance Sheet", icon: "📑", adminOnly: true },
@@ -172,7 +172,7 @@ const Sidebar = () => {
   ];
 
   const isAdmin = user?.role === 'admin';
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleNavItems = navItems.filter(item => !item.hidden && (!item.adminOnly || isAdmin));
 
   return (
     <>
@@ -667,6 +667,7 @@ const CashBook = () => {
   const [allAdjustments, setAllAdjustments] = useState([]);
   const [settings, setSettings] = useState({ opening_cash: 0, opening_bank: 0 });
   const [parties, setParties] = useState([]);
+  const [balanceMap, setBalanceMap] = useState({});  // `${ptype}:${id}` → current balance
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", mode: "CASH", particulars: "" });
   const [filters, setFilters] = useState({ fromDate: "", toDate: "", type: "", subType: "", party: "", mode: "" });
   const [sortBy, setSortBy] = useState("date-desc");
@@ -696,18 +697,25 @@ const CashBook = () => {
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
       
-      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes] = await Promise.all([
+      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes, bepLedgerRes, dukLedgerRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`),
         axios.get(`${API}/cash-book`),  // ALL entries for summary calc
         axios.get(`${API}/settings`),
-        axios.get(`${API}/adjustments`)  // For JV CASH/BANK adjustments
+        axios.get(`${API}/adjustments`),  // For JV CASH/BANK adjustments
+        axios.get(`${API}/bepaari-ledger`).catch(() => ({ data: [] })),  // for inline balances
+        axios.get(`${API}/dukandar-ledger`).catch(() => ({ data: [] }))
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setAllUnfiltered(allRes.data);
       setSettings(settingsRes.data || { opening_cash: 0, opening_bank: 0 });
       setAllAdjustments(adjRes.data || []);
+      // Build a balance lookup map keyed by `${ptype}:${id}` → current closing balance
+      const balMap = {};
+      (bepLedgerRes.data || []).forEach(b => { balMap[`BEPAARI:${b.id}`] = b.balance || 0; });
+      (dukLedgerRes.data || []).forEach(d => { balMap[`DUKANDAR:${d.id}`] = d.balance || 0; });
+      setBalanceMap(balMap);
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
         ...dukandarsRes.data.map(p => ({ ...p, ptype: "DUKANDAR" })),
@@ -976,6 +984,50 @@ const CashBook = () => {
           disabled={!form.type}
           testId="cb-party-select"
         />
+        {/* Inline current balance hint */}
+        {form.party_id && ["BEPAARI","DUKANDAR"].includes(form.type) && (() => {
+          const bal = balanceMap[`${form.type}:${form.party_id}`];
+          if (bal == null) return null;
+          const isPayment = form.type === "BEPAARI" && form.sub_type === "PAYMENT";
+          const isReceipt = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
+          const showFillBtn = (isPayment && bal > 0) || (isReceipt && bal > 0);
+          const label = form.type === "BEPAARI"
+            ? (bal > 0 ? `Currently payable: ${formatCurrency(bal)}` : bal < 0 ? `Bepaari owes us: ${formatCurrency(-bal)}` : `Settled — ₹0`)
+            : (bal > 0 ? `Currently receivable: ${formatCurrency(bal)}` : bal < 0 ? `Advance with Dukandar: ${formatCurrency(-bal)}` : `Settled — ₹0`);
+          const color = bal > 0 ? (form.type === "BEPAARI" ? "#dc2626" : "#16a34a") : bal < 0 ? "#94a3b8" : "#94a3b8";
+          return (
+            <div data-testid="cb-party-balance-hint" style={{
+              width: '100%',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              color,
+              padding: '4px 0 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}>
+              <span>↳ {label}</span>
+              {showFillBtn && (
+                <button
+                  type="button"
+                  data-testid="cb-fill-full-btn"
+                  onClick={() => setForm({ ...form, amount: String(Math.abs(bal)) })}
+                  style={{
+                    background: '#1f2937',
+                    color: '#fbbf24',
+                    border: 'none',
+                    padding: '3px 10px',
+                    borderRadius: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >{isPayment ? '↳ Pay Full' : '↳ Receive Full'}</button>
+              )}
+            </div>
+          );
+        })()}
         <input type="number" placeholder="Amount (Full Payable)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required={!showDailyExp} disabled={showDailyExp} style={showDailyExp ? {display: 'none'} : {}} />
         {showDailyExp && (
           <>
@@ -1186,6 +1238,7 @@ const Adjustments = () => {
   const [dukandars, setDukandars] = useState([]);
   const [advanceParties, setAdvanceParties] = useState([]);
   const [capitalPartners, setCapitalPartners] = useState([]);
+  const [balanceMap, setBalanceMap] = useState({});
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     debit_type: "",
@@ -1195,6 +1248,17 @@ const Adjustments = () => {
     amount: "",
     narration: ""
   });
+  // Quick Mode (purpose-driven adjustment) state
+  const [quickMode, setQuickMode] = useState("MOVE"); // MOVE | WRITEOFF | CASH_DIFF | PROVISION | ADVANCED
+  const [quick, setQuick] = useState({
+    reduce_type: "",       // party type to reduce
+    reduce_party_id: "",
+    increase_type: "",     // party type / head to increase
+    increase_party_id: "",
+    offset_head: "MANDI_EXPENSE", // for WRITEOFF & CASH_DIFF & PROVISION
+    cash_direction: "INCREASE",   // for CASH_DIFF: INCREASE = cash in hand > app; DECREASE = cash in hand < app
+    cash_mode: "CASH",            // for CASH_DIFF: CASH or BANK
+  });
   const [sortBy, setSortBy] = useState("date-desc");
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -1202,18 +1266,27 @@ const Adjustments = () => {
 
   const fetchData = async () => {
     try {
-      const [adjRes, bepaariRes, dukandarRes, advRes, capRes] = await Promise.all([
+      const [adjRes, bepaariRes, dukandarRes, advRes, capRes, bepLedRes, dukLedRes] = await Promise.all([
         axios.get(`${API}/adjustments`),
         axios.get(`${API}/bepaaris`),
         axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`),
-        axios.get(`${API}/capital-partners`)
+        axios.get(`${API}/capital-partners`),
+        axios.get(`${API}/bepaari-ledger`).catch(() => ({ data: [] })),
+        axios.get(`${API}/dukandar-ledger`).catch(() => ({ data: [] }))
       ]);
       setAdjustments(adjRes.data);
       setBeparis(bepaariRes.data);
       setDukandars(dukandarRes.data);
       setAdvanceParties(advRes.data);
       setCapitalPartners(capRes.data);
+      const bm = {};
+      (bepLedRes.data || []).forEach(b => { bm[`BEPAARI:${b.id}`] = b.balance || 0; });
+      (dukLedRes.data || []).forEach(d => { bm[`DUKANDAR:${d.id}`] = d.balance || 0; });
+      // For advance/capital/loan/amanat — fall back to opening_balance (no daily-activity endpoint)
+      advRes.data.forEach(a => { bm[`ADVANCE:${a.id}`] = a.opening_balance || 0; });
+      capRes.data.forEach(c => { bm[`${c.partner_type}:${c.id}`] = c.opening_balance || 0; });
+      setBalanceMap(bm);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -1235,6 +1308,115 @@ const Adjustments = () => {
 
   const HEAD_TYPES = ["MANDI_EXPENSE","BF_DISCOUNT","MHN_PERSONAL","COMMISSION","KK","JB","ZAKAT","CASH","BANK"];
   const isExpenseHead = (type) => HEAD_TYPES.includes(type);
+
+  // ----- Quick Mode helpers -----
+  // For a given party type, return [debit_type_to_reduce, credit_type_to_reduce]
+  // Reducing a "payable" (Bepaari/Loan/Amanat/Capital we owe) = Debit that party
+  // Reducing a "receivable" (Dukandar/Advance they owe us) = Credit that party
+  const PARTY_KIND = {
+    BEPAARI: "PAYABLE",     // we owe → reduce by Debit
+    DUKANDAR: "RECEIVABLE", // they owe → reduce by Credit
+    ADVANCE: "RECEIVABLE",
+    CAPITAL: "PAYABLE",
+    LOAN: "PAYABLE",
+    AMANAT: "PAYABLE",
+  };
+  // What does "reduce" mean for this party type? Returns 'debit' or 'credit'
+  const reduceSide = (ptype) => PARTY_KIND[ptype] === "RECEIVABLE" ? "credit" : "debit";
+  const increaseSide = (ptype) => reduceSide(ptype) === "credit" ? "debit" : "credit";
+
+  // Build party options including current balance label
+  const partyOptionsWithBal = (ptype) => {
+    const list = (ptype === "BEPAARI" ? bepaaris
+      : ptype === "DUKANDAR" ? dukandars
+      : ptype === "ADVANCE" ? advanceParties
+      : capitalPartners.filter(p => p.partner_type === ptype)) || [];
+    return list.map(p => {
+      const bal = balanceMap[`${ptype}:${p.id}`] || 0;
+      const balStr = bal !== 0 ? ` (${formatCurrency(Math.abs(bal))}${bal > 0 ? '' : ' adv'})` : '';
+      return { value: p.id, label: `${p.name}${balStr}` };
+    }).sort((a, b) => a.label.localeCompare(b.label));
+  };
+
+  const getQuickPartyBalance = (ptype, id) => {
+    if (!ptype || !id) return null;
+    return balanceMap[`${ptype}:${id}`] ?? null;
+  };
+
+  // Translate Quick Mode selection into a standard adjustment payload
+  const buildQuickPayload = () => {
+    const amount = parseFloat(quick.amount || quick.cash_amount || 0);
+    if (!(amount > 0)) {
+      alert("Enter a valid amount");
+      return null;
+    }
+    let payload = { date: form.date, amount, narration: quick.narration || form.narration || "" };
+    if (quickMode === "MOVE") {
+      if (!quick.reduce_type || !quick.reduce_party_id || !quick.increase_type || !quick.increase_party_id) {
+        alert("Pick both parties (reduce-from and increase-to)");
+        return null;
+      }
+      // Same-type transfers only (Bepaari→Bepaari, Dukandar→Dukandar, Advance→Advance).
+      // The backend ledger logic now correctly handles these when encoded as:
+      // debit_party = the party whose balance is REDUCED
+      // credit_party = the party whose balance is INCREASED
+      // (this is the universal rule for same-type transfers regardless of payable/receivable kind)
+      if (quick.reduce_type !== quick.increase_type) {
+        alert("Move between different party types is not allowed here. For cross-type adjustments (e.g. Dukandar pays Bepaari), use the Advanced (Dr/Cr) mode below.");
+        return null;
+      }
+      payload = { ...payload,
+        debit_type: quick.reduce_type, debit_party_id: quick.reduce_party_id,
+        credit_type: quick.increase_type, credit_party_id: quick.increase_party_id };
+    } else if (quickMode === "WRITEOFF") {
+      if (!quick.reduce_type || !quick.reduce_party_id) { alert("Pick a party to reduce"); return null; }
+      if (!quick.offset_head) { alert("Pick offset head"); return null; }
+      const rs = reduceSide(quick.reduce_type);
+      if (rs === "debit") {
+        // Reduce payable: Debit party, Credit offset head
+        payload = { ...payload, debit_type: quick.reduce_type, debit_party_id: quick.reduce_party_id, credit_type: quick.offset_head, credit_party_id: `__${quick.offset_head}__` };
+      } else {
+        // Reduce receivable: Credit party, Debit offset head
+        payload = { ...payload, debit_type: quick.offset_head, debit_party_id: `__${quick.offset_head}__`, credit_type: quick.reduce_type, credit_party_id: quick.reduce_party_id };
+      }
+    } else if (quickMode === "CASH_DIFF") {
+      const cashHead = quick.cash_mode || "CASH";
+      const offset = quick.offset_head || "MANDI_EXPENSE";
+      if (quick.cash_direction === "INCREASE") {
+        // Cash in hand > app → app cash should go up. Debit CASH, Credit offset (income head reduces, or expense reverses)
+        payload = { ...payload, debit_type: cashHead, debit_party_id: `__${cashHead}__`, credit_type: offset, credit_party_id: `__${offset}__` };
+      } else {
+        // Cash in hand < app → app cash should go down. Credit CASH, Debit offset (expense increases)
+        payload = { ...payload, debit_type: offset, debit_party_id: `__${offset}__`, credit_type: cashHead, credit_party_id: `__${cashHead}__` };
+      }
+    } else if (quickMode === "PROVISION") {
+      // Provision: Debit CAPITAL/COMMISSION (source), Credit ZAKAT/etc (liability head)
+      if (!quick.provision_source_type) { alert("Pick provision source"); return null; }
+      if (!quick.provision_target_head) { alert("Pick provision target head"); return null; }
+      if (quick.provision_source_type === "CAPITAL") {
+        if (!quick.provision_source_party_id) { alert("Pick capital partner"); return null; }
+        payload = { ...payload, debit_type: "CAPITAL", debit_party_id: quick.provision_source_party_id, credit_type: quick.provision_target_head, credit_party_id: `__${quick.provision_target_head}__` };
+      } else {
+        // Source is an income head like COMMISSION
+        payload = { ...payload, debit_type: quick.provision_source_type, debit_party_id: `__${quick.provision_source_type}__`, credit_type: quick.provision_target_head, credit_party_id: `__${quick.provision_target_head}__` };
+      }
+    }
+    return payload;
+  };
+
+  const handleQuickSubmit = async () => {
+    const payload = buildQuickPayload();
+    if (!payload) return;
+    try {
+      await axios.post(`${API}/adjustments`, payload);
+      setQuick({ reduce_type: "", reduce_party_id: "", increase_type: "", increase_party_id: "",
+        offset_head: "MANDI_EXPENSE", cash_direction: "INCREASE", cash_mode: "CASH",
+        amount: "", narration: "", provision_source_type: "", provision_target_head: "ZAKAT", provision_source_party_id: "" });
+      fetchData();
+    } catch (err) {
+      alert("Error: " + (err.response?.data?.detail || err.message));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1307,8 +1489,218 @@ const Adjustments = () => {
   return (
     <div className="page">
       <h2>Adjustments / Journal Voucher</h2>
-      <p className="hint">Record triangular settlements where one party pays another on your behalf (no cash moves through you)</p>
+      <p className="hint">Make simple adjustments — move balance between parties, write off small balances, correct cash difference, or set aside provisions.</p>
 
+      {/* === QUICK MODE selector === */}
+      <div style={{
+        background: '#fffbeb',
+        border: '1px solid #fbbf24',
+        borderRadius: '10px',
+        padding: '14px 16px',
+        marginBottom: '16px',
+      }}>
+        <div style={{display:'flex', gap:'8px', flexWrap:'wrap', marginBottom: '12px'}}>
+          {[
+            { key: 'MOVE', icon: '📤', label: 'Move balance between parties' },
+            { key: 'WRITEOFF', icon: '✂️', label: 'Write off party balance' },
+            { key: 'CASH_DIFF', icon: '💰', label: 'Cash difference (App vs Hand)' },
+            { key: 'PROVISION', icon: '📊', label: 'Provision (Zakat etc)' },
+            { key: 'ADVANCED', icon: '⚙️', label: 'Advanced (Dr/Cr)' },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              data-testid={`jv-quick-${opt.key.toLowerCase()}`}
+              onClick={() => setQuickMode(opt.key)}
+              style={{
+                background: quickMode === opt.key ? '#1f2937' : '#fff',
+                color: quickMode === opt.key ? '#fbbf24' : '#475569',
+                border: quickMode === opt.key ? '2px solid #1f2937' : '1px solid #e2e8f0',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >{opt.icon} {opt.label}</button>
+          ))}
+        </div>
+
+        {quickMode !== 'ADVANCED' && (
+          <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+            <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+              <label style={{fontSize:'12.5px', fontWeight:600, color:'#475569'}}>Date:</label>
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            </div>
+
+            {quickMode === 'MOVE' && (
+              <>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#dc2626', minWidth:'140px'}}>Reduce balance of:</label>
+                  <select value={quick.reduce_type} onChange={(e) => setQuick({ ...quick, reduce_type: e.target.value, reduce_party_id: "" })}>
+                    <option value="">Type...</option>
+                    <option value="BEPAARI">Bepaari</option>
+                    <option value="DUKANDAR">Dukandar</option>
+                    <option value="ADVANCE">Advance Party</option>
+                  </select>
+                  {quick.reduce_type && (
+                    <SearchableSelect
+                      options={partyOptionsWithBal(quick.reduce_type)}
+                      value={quick.reduce_party_id}
+                      onChange={(val) => setQuick({ ...quick, reduce_party_id: val })}
+                      placeholder="Pick party"
+                      testId="jv-q-reduce-party"
+                    />
+                  )}
+                  {quick.reduce_party_id && (() => {
+                    const b = getQuickPartyBalance(quick.reduce_type, quick.reduce_party_id);
+                    return b != null && (
+                      <span style={{fontSize:'12px', color:'#64748b'}}>Current: <strong>{formatCurrency(Math.abs(b))}</strong></span>
+                    );
+                  })()}
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#16a34a', minWidth:'140px'}}>Add to balance of:</label>
+                  <select value={quick.increase_type} onChange={(e) => setQuick({ ...quick, increase_type: e.target.value, increase_party_id: "" })}>
+                    <option value="">Type...</option>
+                    <option value="BEPAARI">Bepaari</option>
+                    <option value="DUKANDAR">Dukandar</option>
+                    <option value="ADVANCE">Advance Party</option>
+                  </select>
+                  {quick.increase_type && (
+                    <SearchableSelect
+                      options={partyOptionsWithBal(quick.increase_type)}
+                      value={quick.increase_party_id}
+                      onChange={(val) => setQuick({ ...quick, increase_party_id: val })}
+                      placeholder="Pick party"
+                      testId="jv-q-increase-party"
+                    />
+                  )}
+                  {quick.increase_party_id && (() => {
+                    const b = getQuickPartyBalance(quick.increase_type, quick.increase_party_id);
+                    return b != null && (
+                      <span style={{fontSize:'12px', color:'#64748b'}}>Current: <strong>{formatCurrency(Math.abs(b))}</strong></span>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+
+            {quickMode === 'WRITEOFF' && (
+              <>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#dc2626', minWidth:'140px'}}>Reduce balance of:</label>
+                  <select value={quick.reduce_type} onChange={(e) => setQuick({ ...quick, reduce_type: e.target.value, reduce_party_id: "" })}>
+                    <option value="">Type...</option>
+                    <option value="BEPAARI">Bepaari</option>
+                    <option value="DUKANDAR">Dukandar</option>
+                    <option value="ADVANCE">Advance Party</option>
+                  </select>
+                  {quick.reduce_type && (
+                    <SearchableSelect
+                      options={partyOptionsWithBal(quick.reduce_type)}
+                      value={quick.reduce_party_id}
+                      onChange={(val) => setQuick({ ...quick, reduce_party_id: val })}
+                      placeholder="Pick party"
+                      testId="jv-q-writeoff-party"
+                    />
+                  )}
+                  {quick.reduce_party_id && (() => {
+                    const b = getQuickPartyBalance(quick.reduce_type, quick.reduce_party_id);
+                    return b != null && (
+                      <span style={{fontSize:'12px', color:'#64748b'}}>Current: <strong>{formatCurrency(Math.abs(b))}</strong></span>
+                    );
+                  })()}
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#475569', minWidth:'140px'}}>Offset against:</label>
+                  <select value={quick.offset_head} onChange={(e) => setQuick({ ...quick, offset_head: e.target.value })} data-testid="jv-q-writeoff-head">
+                    <option value="MANDI_EXPENSE">Mandi Expense</option>
+                    <option value="BF_DISCOUNT">BF Discount</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {quickMode === 'CASH_DIFF' && (
+              <>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, minWidth:'140px'}}>App vs Hand:</label>
+                  <select value={quick.cash_direction} onChange={(e) => setQuick({ ...quick, cash_direction: e.target.value })} data-testid="jv-q-cash-dir">
+                    <option value="INCREASE">Cash in hand &gt; App (Increase app cash)</option>
+                    <option value="DECREASE">Cash in hand &lt; App (Decrease app cash)</option>
+                  </select>
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, minWidth:'140px'}}>Money type:</label>
+                  <select value={quick.cash_mode} onChange={(e) => setQuick({ ...quick, cash_mode: e.target.value })}>
+                    <option value="CASH">Cash</option>
+                    <option value="BANK">Bank</option>
+                  </select>
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, minWidth:'140px'}}>Offset against:</label>
+                  <select value={quick.offset_head} onChange={(e) => setQuick({ ...quick, offset_head: e.target.value })}>
+                    <option value="MANDI_EXPENSE">Mandi Expense</option>
+                    <option value="BF_DISCOUNT">BF Discount</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {quickMode === 'PROVISION' && (
+              <>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#dc2626', minWidth:'140px'}}>Source (reduce):</label>
+                  <select value={quick.provision_source_type || ""} onChange={(e) => setQuick({ ...quick, provision_source_type: e.target.value, provision_source_party_id: "" })}>
+                    <option value="">Type...</option>
+                    <option value="CAPITAL">Capital Partner</option>
+                    <option value="COMMISSION">Commission Earned</option>
+                    <option value="KK">KK</option>
+                    <option value="JB">JB</option>
+                  </select>
+                  {quick.provision_source_type === "CAPITAL" && (
+                    <SearchableSelect
+                      options={capitalPartners.filter(p => p.partner_type === "CAPITAL").map(p => ({ value: p.id, label: p.name }))}
+                      value={quick.provision_source_party_id || ""}
+                      onChange={(val) => setQuick({ ...quick, provision_source_party_id: val })}
+                      placeholder="Pick partner"
+                      testId="jv-q-prov-partner"
+                    />
+                  )}
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, color:'#16a34a', minWidth:'140px'}}>Provision for:</label>
+                  <select value={quick.provision_target_head || "ZAKAT"} onChange={(e) => setQuick({ ...quick, provision_target_head: e.target.value })} data-testid="jv-q-prov-target">
+                    <option value="ZAKAT">Zakat</option>
+                    <option value="MANDI_EXPENSE">Mandi Expense (pre-provision)</option>
+                    <option value="MHN_PERSONAL">MHN Personal Draw (pre-provision)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {quickMode !== 'ADVANCED' && (
+              <>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, minWidth:'140px'}}>Amount:</label>
+                  <input type="number" placeholder="₹" value={quick.amount || ""} onChange={(e) => setQuick({ ...quick, amount: e.target.value })} style={{maxWidth:'160px'}} data-testid="jv-q-amount" />
+                </div>
+                <div style={{display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap'}}>
+                  <label style={{fontSize:'12.5px', fontWeight:600, minWidth:'140px'}}>Reason (optional):</label>
+                  <input type="text" placeholder="Brief note" value={quick.narration || ""} onChange={(e) => setQuick({ ...quick, narration: e.target.value })} style={{minWidth:'260px'}} />
+                </div>
+                <div>
+                  <button type="button" onClick={handleQuickSubmit} className="btn-primary" data-testid="jv-q-save">Save Adjustment</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* === ADVANCED MODE (original Dr/Cr form) === */}
+      {quickMode === 'ADVANCED' && (
       <form className="entry-form adjustment-form" onSubmit={handleSubmit}>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
         
@@ -1398,6 +1790,7 @@ const Adjustments = () => {
         <input type="text" placeholder="Narration (e.g., Jagdish paid Bepaari directly)" value={form.narration} onChange={(e) => setForm({ ...form, narration: e.target.value })} style={{minWidth: '300px'}} />
         <button type="submit" className="btn-primary">Add Adjustment</button>
       </form>
+      )}
 
       <div className="filter-bar">
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
