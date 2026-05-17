@@ -1909,6 +1909,34 @@ async def get_bepaari_aakda(date: str):
     # Get ALL adjustments (for opening balance) and today's adjustments
     all_adjustments = serialize_docs(await db.adjustments.find({}).to_list(5000))
     prev_adjustments = [a for a in all_adjustments if a["date"] < date]
+    # === Centralized 6-case directional JV sign helper for Bepaari ===
+    # Returns the NET sign-adjusted impact on this bepaari's payable balance.
+    # Positive = increases payable (we owe more). Negative = reduces payable.
+    PAYABLE_TYPES_BEP = ["BEPAARI", "CAPITAL", "LOAN", "AMANAT"]
+    RECEIVABLE_TYPES_BEP = ["DUKANDAR", "ADVANCE"]
+    expense_heads_bep = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
+
+    def _jv_impact_on_bepaari(adj, bep_id):
+        """Returns signed amount to ADD to the bepaari's closing balance.
+        Mirrors get_bepaari_ledger 6-case logic exactly."""
+        if adj.get("credit_type") == "BEPAARI" and adj.get("credit_party_id") == bep_id:
+            other = adj.get("debit_type")
+            if other in RECEIVABLE_TYPES_BEP:
+                return -adj["amount"]  # someone paid bepaari → reduce payable
+            elif other in PAYABLE_TYPES_BEP:
+                return +adj["amount"]  # transfer IN from another payable → increase payable
+            elif other in expense_heads_bep:
+                return +adj["amount"]  # legacy write-off ADD → increase payable
+        if adj.get("debit_type") == "BEPAARI" and adj.get("debit_party_id") == bep_id:
+            other = adj.get("credit_type")
+            if other in PAYABLE_TYPES_BEP:
+                return -adj["amount"]  # transfer OUT → reduce payable
+            elif other in expense_heads_bep:
+                return -adj["amount"]  # write-off to expense → reduce payable
+            elif other in RECEIVABLE_TYPES_BEP:
+                return +adj["amount"]  # rare: adjustment with receivable → increase payable
+        return 0
+
     today_adjustments = [a for a in all_adjustments if a["date"] == date]
     
     aakda_list = []
@@ -1917,7 +1945,10 @@ async def get_bepaari_aakda(date: str):
         # Today's sales
         b_sales_today = [s for s in sales if s["bepaari_id"] == b["id"]]
         b_cash_today = [c for c in cash_entries if c.get("party_id") == b["id"]]
-        b_adj_today = [a for a in today_adjustments if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]]
+        # Include JVs where bepaari is on EITHER side (debit-out or credit-in)
+        b_adj_today = [a for a in today_adjustments
+                       if (a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"])
+                       or (a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"])]
         
         if not b_sales_today and not b_cash_today and not b_adj_today:
             continue  # Skip Bepaaris with no activity today
@@ -1925,7 +1956,9 @@ async def get_bepaari_aakda(date: str):
         # Previous data for opening balance calculation
         b_prev_sales = [s for s in prev_sales if s["bepaari_id"] == b["id"]]
         b_prev_cash = [c for c in prev_cash if c.get("party_id") == b["id"]]
-        b_prev_adj = [a for a in prev_adjustments if a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"]]
+        b_prev_adj = [a for a in prev_adjustments
+                       if (a.get("credit_type") == "BEPAARI" and a.get("credit_party_id") == b["id"])
+                       or (a.get("debit_type") == "BEPAARI" and a.get("debit_party_id") == b["id"])]
         
         # Calculate previous balance (opening for today)
         prev_gross = sum(s["gross_amount"] for s in b_prev_sales)
@@ -1944,18 +1977,13 @@ async def get_bepaari_aakda(date: str):
         prev_gawali = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "GAWALI")
         prev_cash_adv = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "CASH_ADV")
         prev_payments = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "PAYMENT")
-        prev_adj_amount = sum(a["amount"] for a in b_prev_adj)  # JV credits to this Bepaari
-        
-        # Split previous JVs into two buckets:
-        #   - Write-offs (Debit=expense head, Credit=Bepaari) → increase payable (we absorbed expense, still owe more)
-        #   - Party-to-party (Debit=Dukandar/Advance, Credit=Bepaari) → reduce payable (party paid bepaari on our behalf)
-        expense_heads_bep = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
-        prev_adj_writeoff = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") in expense_heads_bep)
-        prev_adj_p2p = sum(a["amount"] for a in b_prev_adj if a.get("debit_type") not in expense_heads_bep)
+        # Compute the net impact of ALL previous JVs on this bepaari using directional logic
+        prev_adj_net = sum(_jv_impact_on_bepaari(a, b["id"]) for a in b_prev_adj)
+        prev_adj_amount = sum(a["amount"] for a in b_prev_adj)  # legacy magnitude — kept for completeness
 
         prev_total_ded = prev_comm + prev_kk + prev_jb + prev_motor + prev_bhussa + prev_gawali + prev_cash_adv
-        # Opening: gross up, deductions+payments+party-to-party JV reduce it, write-offs add to it
-        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments - prev_adj_p2p + prev_adj_writeoff
+        # Opening: gross up - deductions - payments + signed JV impact
+        opening_balance = b.get("opening_balance", 0) + prev_gross - prev_total_ded - prev_payments + prev_adj_net
         
         # Today's calculations
         today_gross = sum(s["gross_amount"] for s in b_sales_today)
@@ -1973,14 +2001,14 @@ async def get_bepaari_aakda(date: str):
         today_gawali = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "GAWALI")
         today_cash_adv = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "CASH_ADV")
         today_payments = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "PAYMENT")
-        today_adj_writeoff = sum(a["amount"] for a in b_adj_today if a.get("debit_type") in expense_heads_bep)
-        today_adj_p2p = sum(a["amount"] for a in b_adj_today if a.get("debit_type") not in expense_heads_bep)
-        today_adj_amount = today_adj_writeoff + today_adj_p2p  # kept for compatibility / summary display
+        # Signed net JV impact for today
+        today_adj_net = sum(_jv_impact_on_bepaari(a, b["id"]) for a in b_adj_today)
+        today_adj_amount = today_adj_net  # signed; UI will show sign
         
         today_total_ded = today_comm + today_kk + today_jb + today_motor + today_bhussa + today_gawali + today_cash_adv
         today_net = today_gross - today_total_ded
-        # Closing: write-offs add to payable (we owe more), party-to-party JV reduces it
-        closing_balance = opening_balance + today_net - today_payments - today_adj_p2p + today_adj_writeoff
+        # Closing: signed JV impact applied directly
+        closing_balance = opening_balance + today_net - today_payments + today_adj_net
         
         # Sales breakdown by Dukandar
         sales_detail = []
