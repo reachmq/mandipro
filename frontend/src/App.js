@@ -1091,6 +1091,45 @@ const CashBook = () => {
             <p class="footer">Generated from Mandi Accounting App | Haji Mushtaq Nana & Sons</p></body></html>`);
           w.document.close(); w.print();
         }}>Print / Save PDF</button>
+        <button className="btn-secondary" data-testid="cb-excel-btn" onClick={() => {
+          // CSV download (opens cleanly in Excel) — respects current filters and sort
+          const dateRange = filters.fromDate && filters.toDate ? `${filters.fromDate}_to_${filters.toDate}` : filters.fromDate ? `from_${filters.fromDate}` : 'all';
+          const headers = ["Date","Type","Sub-Type","Party","Amount","BF Disc","Mode","Comments"];
+          const escapeCsv = (v) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v);
+            if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+            return s;
+          };
+          const rows = sortedEntries.map(e => [
+            e.date,
+            e.type,
+            e.sub_type,
+            e.party_name || '',
+            e.amount,
+            e.bf_disc || 0,
+            e.mode,
+            e.particulars || ''
+          ].map(escapeCsv).join(','));
+          // Filter context line for traceability
+          const filterLine = `# Filters: ${[
+            filters.fromDate && `from=${filters.fromDate}`,
+            filters.toDate && `to=${filters.toDate}`,
+            filters.type && `type=${filters.type}`,
+            filters.subType && `subtype=${filters.subType}`,
+            filters.party && `party=${filters.party}`,
+            filters.mode && `mode=${filters.mode}`,
+          ].filter(Boolean).join(' | ') || 'none'}`;
+          const totalLine = `,,,Total (${sortedEntries.length}),${filteredTotal},,,`;
+          const csv = "\ufeff" + filterLine + "\n" + headers.join(',') + "\n" + rows.join("\n") + "\n" + totalLine + "\n";
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `cash_bank_${dateRange}_${new Date().toISOString().slice(0,10)}.csv`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }}>📥 Download Excel</button>
       </div>
 
       {/* Mobile Filters - dropdown row (only visible on mobile) */}
