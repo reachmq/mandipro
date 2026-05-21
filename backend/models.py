@@ -50,6 +50,7 @@ class Bepaari(BaseModel):
     name: str
     commission_percent: float = 4.0
     flat_rate_per_goat: Optional[float] = None
+    jb_rate_override: Optional[float] = None  # If set, overrides global JB rate for this bepaari
     opening_balance: float = 0.0
     phone: Optional[str] = None
     is_active: bool = True
@@ -142,6 +143,7 @@ class MasterCreate(BaseModel):
     opening_balance: float = 0.0
     commission_percent: Optional[float] = None
     flat_rate: Optional[float] = None
+    jb_rate_override: Optional[float] = None
     partner_type: Optional[str] = None
     phone: Optional[str] = None
 

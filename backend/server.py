@@ -332,6 +332,7 @@ async def create_bepaari(data: MasterCreate):
         opening_balance=data.opening_balance,
         commission_percent=data.commission_percent or 4.0,
         flat_rate_per_goat=data.flat_rate,
+        jb_rate_override=data.jb_rate_override,
         phone=data.phone
     )
     doc = bepaari.model_dump()
@@ -341,7 +342,7 @@ async def create_bepaari(data: MasterCreate):
 
 @api_router.put("/bepaaris/{bepaari_id}")
 async def update_bepaari(bepaari_id: str, data: dict):
-    allowed = {"name", "phone", "commission_percent", "flat_rate_per_goat", "opening_balance"}
+    allowed = {"name", "phone", "commission_percent", "flat_rate_per_goat", "jb_rate_override", "opening_balance"}
     safe = {k: v for k, v in data.items() if k in allowed}
     await db.bepaaris.update_one({"id": bepaari_id}, {"$set": safe})
     return {"status": "updated"}
@@ -1067,7 +1068,8 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
         
         # KK is charged per market day, not flat
         kk = settings.get("kk_fixed", 100) * market_days if market_days > 0 else 0
-        jb = qty * settings.get("jb_rate", 10)
+        b_jb_rate = b.get("jb_rate_override") if b.get("jb_rate_override") is not None else settings.get("jb_rate", 10)
+        jb = qty * b_jb_rate
         
         motor = sum(c["amount"] for c in b_cash if c.get("sub_type") == "MOTOR")
         bhussa = sum(c["amount"] for c in b_cash if c.get("sub_type") == "BHUSSA")
@@ -1971,7 +1973,8 @@ async def get_bepaari_aakda(date: str):
             prev_comm = prev_gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
         
         prev_kk = settings.get("kk_fixed", 100) * prev_market_days if prev_market_days > 0 else 0
-        prev_jb = prev_qty * settings.get("jb_rate", 10)
+        b_jb_rate = b.get("jb_rate_override") if b.get("jb_rate_override") is not None else settings.get("jb_rate", 10)
+        prev_jb = prev_qty * b_jb_rate
         prev_motor = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "MOTOR")
         prev_bhussa = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "BHUSSA")
         prev_gawali = sum(c["amount"] for c in b_prev_cash if c.get("sub_type") == "GAWALI")
@@ -1995,7 +1998,7 @@ async def get_bepaari_aakda(date: str):
             today_comm = today_gross * (b.get("commission_percent", settings.get("commission_rate", 4)) / 100)
         
         today_kk = settings.get("kk_fixed", 100) if today_qty > 0 else 0
-        today_jb = today_qty * settings.get("jb_rate", 10)
+        today_jb = today_qty * b_jb_rate
         today_motor = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "MOTOR")
         today_bhussa = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "BHUSSA")
         today_gawali = sum(c["amount"] for c in b_cash_today if c.get("sub_type") == "GAWALI")
@@ -2043,7 +2046,7 @@ async def get_bepaari_aakda(date: str):
                 "rate_diff": today_rate_diff,
                 "kk": today_kk,
                 "jb": today_jb,
-                "jb_rate": settings.get("jb_rate", 10),
+                "jb_rate": b_jb_rate,
                 "motor": today_motor,
                 "bhussa": today_bhussa,
                 "gawali": today_gawali,

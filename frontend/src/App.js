@@ -2291,7 +2291,9 @@ const PartyStatement = () => {
       const commissionRate = selectedBepaari.commission_percent != null
         ? selectedBepaari.commission_percent
         : (settings.commission_rate ?? 4);
-      const jbRate = settings.jb_rate ?? 10;
+      const jbRate = selectedBepaari.jb_rate_override != null
+        ? selectedBepaari.jb_rate_override
+        : (settings.jb_rate ?? 10);
       const kkFixed = settings.kk_fixed ?? 100;
 
       // Group same-date Motor/Bhussa/Gawali expenses so they net into the Sales line
@@ -3286,7 +3288,7 @@ const Masters = () => {
   const [advParties, setAdvParties] = useState([]);
   const [capPartners, setCapPartners] = useState([]);
   const [settings, setSettings] = useState({});
-  const [form, setForm] = useState({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", partner_type: "CAPITAL", phone: "" });
+  const [form, setForm] = useState({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", jb_rate_override: "", partner_type: "CAPITAL", phone: "" });
   const [activeTab, setActiveTab] = useState("bepaaris");
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState(null);
@@ -3310,9 +3312,10 @@ const Masters = () => {
       name: form.name, opening_balance: parseFloat(form.opening_balance || 0),
       commission_percent: form.flat_rate_per_goat ? null : parseFloat(form.commission_percent || 4),
       flat_rate: form.flat_rate_per_goat ? parseFloat(form.flat_rate_per_goat) : null,
+      jb_rate_override: form.jb_rate_override ? parseFloat(form.jb_rate_override) : null,
       partner_type: form.partner_type, phone: form.phone
     });
-    setForm({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", partner_type: "CAPITAL", phone: "" });
+    setForm({ name: "", opening_balance: "0", commission_percent: "4", flat_rate_per_goat: "", jb_rate_override: "", partner_type: "CAPITAL", phone: "" });
     fetchData();
   };
 
@@ -3331,6 +3334,7 @@ const Masters = () => {
       opening_balance: item.opening_balance || 0,
       commission_percent: item.flat_rate_per_goat ? "" : (item.commission_percent || 4),
       flat_rate_per_goat: item.flat_rate_per_goat || "",
+      jb_rate_override: item.jb_rate_override != null ? item.jb_rate_override : "",
       partner_type: item.partner_type || "CAPITAL"
     });
   };
@@ -3350,6 +3354,9 @@ const Masters = () => {
         updates.commission_percent = parseFloat(editForm.commission_percent || 4);
         updates.flat_rate_per_goat = null;
       }
+      updates.jb_rate_override = editForm.jb_rate_override !== "" && editForm.jb_rate_override != null
+        ? parseFloat(editForm.jb_rate_override)
+        : null;
     }
     updates.opening_balance = parseFloat(editForm.opening_balance);
     
@@ -3433,6 +3440,12 @@ const Masters = () => {
                 <span className="or-divider">OR</span>
                 <input type="number" placeholder="₹ Per Goat" value={form.flat_rate_per_goat}
                   onChange={(e) => setForm({ ...form, flat_rate_per_goat: e.target.value, commission_percent: "" })} />
+                <input type="number" placeholder="JB ₹/goat (override, optional)"
+                  title="Leave blank to use global JB rate from Settings. Set a value to override JB rate for this Bepaari only (useful during Qurbani/Eid)."
+                  value={form.jb_rate_override}
+                  onChange={(e) => setForm({ ...form, jb_rate_override: e.target.value })}
+                  data-testid="bep-jb-override"
+                  style={{maxWidth: '180px'}} />
               </>
             )}
             {activeTab === "capital" && (
@@ -3509,6 +3522,13 @@ const Masters = () => {
                     <input type="number" value={editForm.flat_rate_per_goat}
                       onChange={(e) => setEditForm({ ...editForm, flat_rate_per_goat: e.target.value, commission_percent: "" })}
                       placeholder="e.g. 500" />
+                  </label>
+                  <label>
+                    JB Override (₹/goat — leave blank for default):
+                    <input type="number" value={editForm.jb_rate_override}
+                      onChange={(e) => setEditForm({ ...editForm, jb_rate_override: e.target.value })}
+                      placeholder="e.g. 100 during Qurbani"
+                      data-testid="edit-bep-jb-override" />
                   </label>
                 </>
               )}
