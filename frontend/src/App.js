@@ -2206,6 +2206,7 @@ const PartyStatement = () => {
   const [searchParams] = useSearchParams();
   const [bepaaris, setBeparis] = useState([]);
   const [dukandars, setDukandars] = useState([]);
+  const [advanceParties, setAdvanceParties] = useState([]);
   const [settings, setSettings] = useState({ commission_rate: 4, jb_rate: 10, kk_fixed: 100 });
   const [partyType, setPartyType] = useState(searchParams.get("type") || "bepaari");
   const [partyId, setPartyId] = useState(searchParams.get("id") || "");
@@ -2220,10 +2221,12 @@ const PartyStatement = () => {
     Promise.all([
       axios.get(`${API}/bepaaris`),
       axios.get(`${API}/dukandars`),
+      axios.get(`${API}/advance-parties`),
       axios.get(`${API}/settings`)
-    ]).then(([b, d, s]) => {
+    ]).then(([b, d, a, s]) => {
       setBeparis(b.data);
       setDukandars(d.data);
+      setAdvanceParties(a.data || []);
       setSettings(s.data || {});
     });
   }, []);
@@ -2239,7 +2242,10 @@ const PartyStatement = () => {
   const fetchStatement = async () => {
     if (!partyId) { alert("Please select a party"); return; }
     setLoading(true);
-    let url = `${API}/party-statement/${partyType}/${partyId}?`;
+    const endpoint = partyType === "advance"
+      ? `${API}/advance-party-statement/${partyId}`
+      : `${API}/party-statement/${partyType}/${partyId}`;
+    let url = `${endpoint}?`;
     if (fromDate) url += `from_date=${fromDate}&`;
     if (toDate) url += `to_date=${toDate}&`;
     const res = await axios.get(url);
@@ -2254,6 +2260,10 @@ const PartyStatement = () => {
   };
 
   const downloadExcel = () => {
+    if (partyType === "advance") {
+      alert("Excel export for Advance Party statements not yet supported. Use Print/Save PDF for now.");
+      return;
+    }
     let url = `${API}/export/party-statement/${partyType}/${partyId}?`;
     if (fromDate) url += `from_date=${fromDate}&`;
     if (toDate) url += `to_date=${toDate}&`;
@@ -2266,6 +2276,40 @@ const PartyStatement = () => {
     
     const entries = [];
     const isBepari = partyType === "bepaari";
+    const isAdvance = partyType === "advance";
+
+    // === ADVANCE PARTY LEDGER ===
+    if (isAdvance) {
+      // Cash entries: GIVEN=Debit (increases receivable), RECEIVED=Credit (reduces it)
+      statement.cash_entries.forEach(c => {
+        const isGiven = c.sub_type === "GIVEN";
+        entries.push({
+          date: c.date,
+          description: `${c.sub_type} (${c.mode})${c.particulars ? ' - ' + c.particulars : ''}`,
+          debit: isGiven ? c.amount : 0,
+          credit: !isGiven ? c.amount : 0,
+          type: 'cash',
+        });
+      });
+      // JVs: backend already returns ledger_debit/ledger_credit + effect label
+      (statement.adjustments || []).forEach(a => {
+        entries.push({
+          date: a.date,
+          description: `JV: ${a.effect}${a.narration ? ' — ' + a.narration : ''}`,
+          debit: a.ledger_debit || 0,
+          credit: a.ledger_credit || 0,
+          type: 'adjustment',
+        });
+      });
+      entries.sort((a, b) => a.date.localeCompare(b.date));
+      let balance = statement.summary.opening_balance || 0;
+      entries.forEach(e => {
+        // Advance party: positive balance = they owe us (receivable). Debit increases, Credit reduces.
+        balance = balance + e.debit - e.credit;
+        e.balance = balance;
+      });
+      return entries;
+    }
     
     if (isBepari) {
       // BEPAARI LEDGER: Group sales by date, show NET amount only (like Aakda)
@@ -2521,6 +2565,7 @@ const PartyStatement = () => {
     if (partyType === "bepaari") {
       return closingBalance >= 0 ? `To Pay ${name}` : `To Receive from ${name}`;
     } else {
+      // Dukandar AND Advance Party: positive = receivable
       return closingBalance >= 0 ? `To Receive from ${name}` : `To Pay ${name}`;
     }
   };
@@ -2607,7 +2652,7 @@ const PartyStatement = () => {
     printWindow.print();
   };
 
-  const parties = partyType === "bepaari" ? bepaaris : dukandars;
+  const parties = partyType === "bepaari" ? bepaaris : partyType === "dukandar" ? dukandars : advanceParties;
 
   return (
     <div className="page">
@@ -2618,6 +2663,7 @@ const PartyStatement = () => {
         <select value={partyType} onChange={(e) => { setPartyType(e.target.value); setPartyId(""); setStatement(null); }}>
           <option value="bepaari">Bepaari</option>
           <option value="dukandar">Dukandar</option>
+          <option value="advance">Advance Party</option>
         </select>
         <SearchableSelect
           options={parties.map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))}

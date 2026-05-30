@@ -672,6 +672,122 @@ async def update_cash_book_entry(entry_id: str, data: dict, user: dict = Depends
 
 
 # ============== PARTY STATEMENT (FOR DISPUTES) ==============
+
+# ============== ADVANCE PARTY STATEMENT ==============
+@api_router.get("/advance-party-statement/{party_id}")
+async def get_advance_party_statement(
+    party_id: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Statement for an Advance Party (money lent/borrowed to non-trade parties like KMN, JUNAID ADV, etc.).
+    Includes: opening balance + Cash Book entries (Type=ADVANCE) + JVs touching this party.
+    Convention: positive balance = party owes us (receivable).
+    Debit column = INCREASES our receivable; Credit column = REDUCES it.
+    """
+    party = await db.advance_parties.find_one({"id": party_id})
+    if not party:
+        raise HTTPException(status_code=404, detail="Advance party not found")
+
+    original_opening = party.get("opening_balance", 0)
+
+    # Pre-period date filter for opening-balance recompute
+    date_filter = {}
+    if from_date and to_date:
+        date_filter = {"$gte": from_date, "$lte": to_date}
+    elif from_date:
+        date_filter = {"$gte": from_date}
+    elif to_date:
+        date_filter = {"$lte": to_date}
+
+    # Get all cash book entries (type=ADVANCE, party_name = this party's name OR party_id matches)
+    cash_query_base = {"type": "ADVANCE", "$or": [{"party_id": party_id}, {"party_name": party["name"]}]}
+    if date_filter:
+        cash_query = {**cash_query_base, "date": date_filter}
+    else:
+        cash_query = cash_query_base
+    cash_entries = serialize_docs(await db.cash_book.find(cash_query).sort("date", 1).to_list(5000))
+
+    # Get all adjustments touching this party
+    adj_query = {"$or": [
+        {"debit_type": "ADVANCE", "debit_party_id": party_id},
+        {"credit_type": "ADVANCE", "credit_party_id": party_id},
+    ]}
+    if date_filter:
+        adj_query["date"] = date_filter
+    all_adj = serialize_docs(await db.adjustments.find(adj_query).sort("date", 1).to_list(5000))
+
+    # Calculate opening balance as of from_date (if provided)
+    calculated_opening = original_opening
+    if from_date:
+        prev_cash_query = {"type": "ADVANCE", "$or": [{"party_id": party_id}, {"party_name": party["name"]}], "date": {"$lt": from_date}}
+        prev_cash = serialize_docs(await db.cash_book.find(prev_cash_query).to_list(5000))
+        # GIVEN = increases receivable (we gave money), RECEIVED = reduces receivable (they paid back)
+        prev_given = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "GIVEN")
+        prev_received = sum(c["amount"] for c in prev_cash if c.get("sub_type") == "RECEIVED")
+        prev_adj = serialize_docs(await db.adjustments.find({
+            "$or": [
+                {"debit_type": "ADVANCE", "debit_party_id": party_id},
+                {"credit_type": "ADVANCE", "credit_party_id": party_id},
+            ],
+            "date": {"$lt": from_date},
+        }).to_list(5000))
+        # debit_type=ADVANCE → INCREASES receivable; credit_type=ADVANCE → REDUCES receivable
+        prev_adj_dr = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == party_id)
+        prev_adj_cr = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == party_id)
+        calculated_opening = original_opening + prev_given - prev_received + prev_adj_dr - prev_adj_cr
+
+    # Build adjustment entries with directional ledger_debit/ledger_credit + effect labels
+    party_adjustments = []
+    for a in all_adj:
+        if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == party_id:
+            # this party is on debit side → other side is credit_type
+            party_adjustments.append({
+                **a,
+                "direction": "DEBIT",
+                "effect": f"Adjustment with {a.get('credit_party_name','')}" if a.get("credit_party_name") else f"Adjustment to {a.get('credit_type','')}",
+                "ledger_debit": a["amount"],
+                "ledger_credit": 0,
+            })
+        elif a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == party_id:
+            party_adjustments.append({
+                **a,
+                "direction": "CREDIT",
+                "effect": f"Adjustment with {a.get('debit_party_name','')}" if a.get("debit_party_name") else f"Adjustment from {a.get('debit_type','')}",
+                "ledger_debit": 0,
+                "ledger_credit": a["amount"],
+            })
+
+    # Summary numbers for the chosen period
+    given = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "GIVEN")
+    received = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "RECEIVED")
+    adj_dr = sum(a["ledger_debit"] for a in party_adjustments)
+    adj_cr = sum(a["ledger_credit"] for a in party_adjustments)
+    closing = calculated_opening + given - received + adj_dr - adj_cr
+
+    return {
+        "party": {
+            "id": party["id"],
+            "name": party["name"],
+            "phone": party.get("phone"),
+            "opening_balance": calculated_opening,
+            "original_opening_balance": original_opening,
+        },
+        "sales": [],
+        "cash_entries": cash_entries,
+        "adjustments": party_adjustments,
+        "balance_transfers": [],
+        "summary": {
+            "opening_balance": calculated_opening,
+            "given_total": given,
+            "received_total": received,
+            "adjustments_debit": adj_dr,
+            "adjustments_credit": adj_cr,
+            "closing_balance": closing,
+        },
+    }
+
+
 @api_router.get("/party-statement/{party_type}/{party_id}")
 async def get_party_statement(
     party_type: str,
