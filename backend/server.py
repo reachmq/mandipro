@@ -717,6 +717,38 @@ async def get_advance_party_statement(
         adj_query["date"] = date_filter
     all_adj = serialize_docs(await db.adjustments.find(adj_query).sort("date", 1).to_list(5000))
 
+    # Type groupings (mirrors the universal 6-case logic used elsewhere)
+    RECEIVABLE_TYPES_A = ["DUKANDAR", "ADVANCE"]
+    PAYABLE_TYPES_A = ["BEPAARI", "CAPITAL", "LOAN", "AMANAT"]
+    EXPENSE_HEADS_A = ["MANDI_EXPENSE", "BF_DISCOUNT", "MHN_PERSONAL", "COMMISSION", "KK", "JB", "ZAKAT", "CASH", "BANK"]
+
+    def _advance_ledger_effect(a, party_id):
+        """Returns (ledger_debit, ledger_credit, effect_label) for a JV affecting an Advance party.
+        Advance = receivable account. DEBIT column INCREASES receivable, CREDIT REDUCES it.
+        Same convention as Dukandar."""
+        if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == party_id:
+            other = a.get("credit_type")
+            if other in PAYABLE_TYPES_A:
+                # Advance party paid a Bepaari/etc on our behalf → REDUCES our receivable
+                return 0, a["amount"], f"Paid to {a.get('credit_party_name','')}"
+            elif other in RECEIVABLE_TYPES_A:
+                # Transfer OUT to another receivable → REDUCES our receivable
+                return 0, a["amount"], f"Balance transferred to {a.get('credit_party_name','')}"
+            elif other in EXPENSE_HEADS_A:
+                return 0, a["amount"], f"Adjusted to {other}"
+        if a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == party_id:
+            other = a.get("debit_type")
+            if other in RECEIVABLE_TYPES_A:
+                # Transfer IN from another receivable → INCREASES our receivable
+                return a["amount"], 0, f"Balance transferred from {a.get('debit_party_name','')}"
+            elif other in PAYABLE_TYPES_A:
+                # Rare: payable→advance → INCREASES receivable
+                return a["amount"], 0, f"Adjustment with {a.get('debit_party_name','')}"
+            elif other in EXPENSE_HEADS_A:
+                # Write-off pattern → REDUCES receivable
+                return 0, a["amount"], f"Written off to {other}"
+        return None
+
     # Calculate opening balance as of from_date (if provided)
     calculated_opening = original_opening
     if from_date:
@@ -732,31 +764,31 @@ async def get_advance_party_statement(
             ],
             "date": {"$lt": from_date},
         }).to_list(5000))
-        # debit_type=ADVANCE → INCREASES receivable; credit_type=ADVANCE → REDUCES receivable
-        prev_adj_dr = sum(a["amount"] for a in prev_adj if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == party_id)
-        prev_adj_cr = sum(a["amount"] for a in prev_adj if a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == party_id)
-        calculated_opening = original_opening + prev_given - prev_received + prev_adj_dr - prev_adj_cr
+        # Use the directional helper for legacy correctness
+        prev_adj_net = 0  # net delta to receivable
+        for a in prev_adj:
+            eff = _advance_ledger_effect(a, party_id)
+            if eff is None:
+                continue
+            ld, lc, _ = eff
+            prev_adj_net += ld - lc
+        calculated_opening = original_opening + prev_given - prev_received + prev_adj_net
 
     # Build adjustment entries with directional ledger_debit/ledger_credit + effect labels
     party_adjustments = []
     for a in all_adj:
-        if a.get("debit_type") == "ADVANCE" and a.get("debit_party_id") == party_id:
-            # this party is on debit side → other side is credit_type
-            party_adjustments.append({
-                **a,
-                "direction": "DEBIT",
-                "effect": f"Adjustment with {a.get('credit_party_name','')}" if a.get("credit_party_name") else f"Adjustment to {a.get('credit_type','')}",
-                "ledger_debit": a["amount"],
-                "ledger_credit": 0,
-            })
-        elif a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == party_id:
-            party_adjustments.append({
-                **a,
-                "direction": "CREDIT",
-                "effect": f"Adjustment with {a.get('debit_party_name','')}" if a.get("debit_party_name") else f"Adjustment from {a.get('debit_type','')}",
-                "ledger_debit": 0,
-                "ledger_credit": a["amount"],
-            })
+        eff = _advance_ledger_effect(a, party_id)
+        if eff is None:
+            continue
+        ld, lc, label = eff
+        direction = "DEBIT" if ld > 0 else "CREDIT"
+        party_adjustments.append({
+            **a,
+            "direction": direction,
+            "effect": label,
+            "ledger_debit": ld,
+            "ledger_credit": lc,
+        })
 
     # Summary numbers for the chosen period
     given = sum(c["amount"] for c in cash_entries if c.get("sub_type") == "GIVEN")
