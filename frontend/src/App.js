@@ -691,6 +691,25 @@ const CashBook = () => {
   // Composite expense fields (only used when sub_type === "DAILY_EXPENSES")
   const [dailyExp, setDailyExp] = useState({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
 
+  // Fast path (post-insert): only refetch cash-book entries + adjustments. Skip the heavy bepaari/dukandar ledger aggregates.
+  const refreshEntries = async () => {
+    try {
+      let url = `${API}/cash-book?`;
+      if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
+      if (filters.toDate) url += `to_date=${filters.toDate}&`;
+      const [entriesRes, allRes, adjRes] = await Promise.all([
+        axios.get(url),
+        axios.get(`${API}/cash-book`),
+        axios.get(`${API}/adjustments`),
+      ]);
+      setAllEntries(entriesRes.data);
+      setEntries(entriesRes.data);
+      setAllUnfiltered(allRes.data);
+      setAllAdjustments(adjRes.data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  // Full path (initial load + filter change): fetches everything including current-balance map
   const fetchData = async () => {
     try {
       let url = `${API}/cash-book?`;
@@ -767,7 +786,7 @@ const CashBook = () => {
       }
       setDailyExp({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
       setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
-      fetchData();
+      refreshEntries();
       return;
     }
     await axios.post(`${API}/cash-book`, { 
@@ -776,10 +795,10 @@ const CashBook = () => {
       bf_disc: form.bf_disc ? parseFloat(form.bf_disc) : 0
     });
     setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
-    fetchData();
+    refreshEntries();
   };
 
-  const handleDelete = async (id) => { if (window.confirm("Delete?")) { await axios.delete(`${API}/cash-book/${id}`); fetchData(); } };
+  const handleDelete = async (id) => { if (window.confirm("Delete?")) { await axios.delete(`${API}/cash-book/${id}`); refreshEntries(); } };
 
   const handleEdit = (entry) => {
     setEditItem(entry);
@@ -802,7 +821,7 @@ const CashBook = () => {
       bf_disc: editForm.bf_disc ? parseFloat(editForm.bf_disc) : 0
     });
     setEditItem(null);
-    fetchData();
+    refreshEntries();
   };
 
   // Client-side filtering based on column filters
