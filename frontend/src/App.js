@@ -674,6 +674,8 @@ const CashBook = () => {
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [showAllRows, setShowAllRows] = useState(false);  // limit rendered rows for performance
+  const VISIBLE_ROW_LIMIT = 100;
 
   const types = ["BEPAARI", "DUKANDAR", "CAPITAL", "LOAN", "AMANAT", "ADVANCE", "EXPENSE", "ZAKAT"];
   const subTypes = {
@@ -697,15 +699,21 @@ const CashBook = () => {
       let url = `${API}/cash-book?`;
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
-      const [entriesRes, allRes, adjRes] = await Promise.all([
+      const [entriesRes, allRes, adjRes, bepLedgerRes, dukLedgerRes] = await Promise.all([
         axios.get(url),
         axios.get(`${API}/cash-book`),
         axios.get(`${API}/adjustments`),
+        axios.get(`${API}/bepaari-ledger`).catch(() => ({ data: [] })),
+        axios.get(`${API}/dukandar-ledger`).catch(() => ({ data: [] })),
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setAllUnfiltered(allRes.data);
       setAllAdjustments(adjRes.data || []);
+      const balMap = {};
+      (bepLedgerRes.data || []).forEach(b => { balMap[`BEPAARI:${b.id}`] = b.balance || 0; });
+      (dukLedgerRes.data || []).forEach(d => { balMap[`DUKANDAR:${d.id}`] = d.balance || 0; });
+      setBalanceMap(balMap);
     } catch (err) { console.error(err); }
   };
 
@@ -715,22 +723,24 @@ const CashBook = () => {
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
 
-      // REVERTED: dropped the heavy /bepaari-ledger and /dukandar-ledger fetches
-      // that were causing the page to be slow on every load. The inline balance hint
-      // is now disabled. Page is fast again.
-      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes] = await Promise.all([
+      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes, bepLedgerRes, dukLedgerRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`),
         axios.get(`${API}/cash-book`),
         axios.get(`${API}/settings`),
-        axios.get(`${API}/adjustments`)
+        axios.get(`${API}/adjustments`),
+        axios.get(`${API}/bepaari-ledger`).catch(() => ({ data: [] })),
+        axios.get(`${API}/dukandar-ledger`).catch(() => ({ data: [] })),
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setAllUnfiltered(allRes.data);
       setSettings(settingsRes.data || { opening_cash: 0, opening_bank: 0 });
       setAllAdjustments(adjRes.data || []);
-      setBalanceMap({}); // empty → inline hint stays hidden
+      const balMap = {};
+      (bepLedgerRes.data || []).forEach(b => { balMap[`BEPAARI:${b.id}`] = b.balance || 0; });
+      (dukLedgerRes.data || []).forEach(d => { balMap[`DUKANDAR:${d.id}`] = d.balance || 0; });
+      setBalanceMap(balMap);
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
         ...dukandarsRes.data.map(p => ({ ...p, ptype: "DUKANDAR" })),
@@ -874,6 +884,13 @@ const CashBook = () => {
 
   // Calculate filtered total (memoized)
   const filteredTotal = useMemo(() => sortedEntries.reduce((sum, e) => sum + (e.amount || 0), 0), [sortedEntries]);
+
+  // PERFORMANCE FIX: only render top-N rows by default. Months of entries cause hangs
+  // on every keystroke because React re-renders all rows. Cap at 100 unless user toggles.
+  const visibleEntries = useMemo(
+    () => (showAllRows ? sortedEntries : sortedEntries.slice(0, VISIBLE_ROW_LIMIT)),
+    [sortedEntries, showAllRows]
+  );
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
@@ -1198,7 +1215,15 @@ const CashBook = () => {
           {filters.subType && <span className="filter-tag">{filters.subType} <button onClick={() => setFilters({...filters, subType: ""})}>×</button></span>}
           {filters.party && <span className="filter-tag">{filters.party} <button onClick={() => setFilters({...filters, party: ""})}>×</button></span>}
           {filters.mode && <span className="filter-tag">{filters.mode} <button onClick={() => setFilters({...filters, mode: ""})}>×</button></span>}
-          <span className="filter-result">| Showing {sortedEntries.length} entries | Total: <strong>{formatCurrency(filteredTotal)}</strong></span>
+          <span className="filter-result">| Showing {showAllRows || sortedEntries.length <= VISIBLE_ROW_LIMIT ? sortedEntries.length : `${VISIBLE_ROW_LIMIT} of ${sortedEntries.length}`} entries | Total: <strong>{formatCurrency(filteredTotal)}</strong>
+          {sortedEntries.length > VISIBLE_ROW_LIMIT && (
+            <button
+              data-testid="cb-show-all-toggle"
+              onClick={() => setShowAllRows(s => !s)}
+              style={{marginLeft:'12px', background:'#1f2937', color:'#fbbf24', border:'none', padding:'3px 10px', borderRadius:'5px', fontSize:'11.5px', fontWeight:600, cursor:'pointer'}}
+            >{showAllRows ? `Show only latest ${VISIBLE_ROW_LIMIT}` : `Show all ${sortedEntries.length}`}</button>
+          )}
+          </span>
         </div>
       )}
 
@@ -1238,7 +1263,7 @@ const CashBook = () => {
             </tr>
           </thead>
           <tbody>
-            {sortedEntries.map((e) => (
+            {visibleEntries.map((e) => (
               <tr key={e.id}>
                 <td>{fmtDate(e.date)}</td><td>{e.type}</td><td>{e.sub_type}</td><td>{e.party_name || "-"}</td>
                 <td>{formatCurrency(e.amount)}</td>
@@ -1256,7 +1281,7 @@ const CashBook = () => {
 
       {/* Mobile Card Layout */}
       <div className="mobile-cards mobile-only">
-        {sortedEntries.map((e) => (
+        {visibleEntries.map((e) => (
           <div key={e.id} className="mobile-entry-card" data-testid="cash-card">
             <div className="mec-header">
               <span className="mec-date">{fmtDate(e.date)}</span>
