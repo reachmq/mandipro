@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
@@ -784,16 +784,38 @@ const CashBook = () => {
           particulars: form.particulars || "",
         });
       }
+      // Optimistic balance update: each of these expense subtypes REDUCES our payable (we paid the bepaari)
+      // So bepaari balance goes DOWN by the total.
+      const totalDeduction = items.reduce((s, i) => s + i.amount, 0);
+      const key = `BEPAARI:${form.party_id}`;
+      setBalanceMap(prev => ({ ...prev, [key]: (prev[key] || 0) - totalDeduction }));
       setDailyExp({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
       setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
       refreshEntries();
       return;
     }
+    const amt = parseFloat(form.amount);
     await axios.post(`${API}/cash-book`, { 
       ...form, 
-      amount: parseFloat(form.amount),
+      amount: amt,
       bf_disc: form.bf_disc ? parseFloat(form.bf_disc) : 0
     });
+    // Optimistic balance hint update for the inline "Currently payable/receivable" widget
+    if (form.party_id) {
+      const key = `${form.type}:${form.party_id}`;
+      const bfDisc = form.bf_disc ? parseFloat(form.bf_disc) : 0;
+      let delta = 0;
+      // For Bepaari (payable, +ve = we owe): payment/expense REDUCES payable → delta = -amt
+      // For Dukandar (receivable, +ve = they owe): receipt REDUCES receivable → delta = -(amt - bf_disc); refund INCREASES → +amt
+      if (form.type === "BEPAARI") {
+        if (form.sub_type === "PAYMENT") delta = -amt;
+        else if (["MOTOR","BHUSSA","GAWALI","CASH_ADV"].includes(form.sub_type)) delta = -amt;
+      } else if (form.type === "DUKANDAR") {
+        if (form.sub_type === "RECEIPT") delta = -(amt - bfDisc);
+        else if (form.sub_type === "REFUND") delta = +amt;
+      }
+      if (delta !== 0) setBalanceMap(prev => ({ ...prev, [key]: (prev[key] || 0) + delta }));
+    }
     setForm({ ...form, type: "", sub_type: "", party_id: "", amount: "", bf_disc: "", particulars: "" });
     refreshEntries();
   };
@@ -825,16 +847,16 @@ const CashBook = () => {
   };
 
   // Client-side filtering based on column filters
-  const filteredEntries = allEntries.filter(e => {
+  const filteredEntries = useMemo(() => allEntries.filter(e => {
     if (filters.type && e.type !== filters.type) return false;
     if (filters.subType && e.sub_type !== filters.subType) return false;
     if (filters.party && e.party_name !== filters.party) return false;
     if (filters.mode && e.mode !== filters.mode) return false;
     return true;
-  });
+  }), [allEntries, filters]);
 
   // Sorting
-  const sortedEntries = [...filteredEntries].sort((a, b) => {
+  const sortedEntries = useMemo(() => [...filteredEntries].sort((a, b) => {
     if (sortBy === "date-desc") return b.date.localeCompare(a.date);
     if (sortBy === "date-asc") return a.date.localeCompare(b.date);
     if (sortBy === "type-asc") return (a.type || "").localeCompare(b.type || "");
@@ -848,14 +870,14 @@ const CashBook = () => {
     if (sortBy === "mode-asc") return (a.mode || "").localeCompare(b.mode || "");
     if (sortBy === "mode-desc") return (b.mode || "").localeCompare(a.mode || "");
     return 0;
-  });
+  }), [filteredEntries, sortBy]);
 
-  // Get unique values for dropdown filters
-  const uniqueParties = [...new Set(allEntries.map(e => e.party_name).filter(Boolean))].sort();
-  const uniqueSubTypes = [...new Set(allEntries.map(e => e.sub_type).filter(Boolean))].sort();
+  // Get unique values for dropdown filters (memoized)
+  const uniqueParties = useMemo(() => [...new Set(allEntries.map(e => e.party_name).filter(Boolean))].sort(), [allEntries]);
+  const uniqueSubTypes = useMemo(() => [...new Set(allEntries.map(e => e.sub_type).filter(Boolean))].sort(), [allEntries]);
 
-  // Calculate filtered total
-  const filteredTotal = sortedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+  // Calculate filtered total (memoized)
+  const filteredTotal = useMemo(() => sortedEntries.reduce((sum, e) => sum + (e.amount || 0), 0), [sortedEntries]);
 
   // Show BF_Disc field only for DUKANDAR RECEIPT
   const showBfDisc = form.type === "DUKANDAR" && form.sub_type === "RECEIPT";
@@ -865,7 +887,9 @@ const CashBook = () => {
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
   const [summaryMode, setSummaryMode] = useState("daily"); // 'daily' | 'all-time'
 
-  const summary = (() => {
+  // useMemo so this expensive aggregation only runs when underlying data/date changes,
+  // NOT on every keystroke or form-state change.
+  const summary = useMemo(() => {
     const CASH_IN = ["RECEIPT", "TAKEN", "RECEIVED"];
     const BANK_MODES = ["BANK", "UPI", "TRANSFER"];
     const calcInOut = (es, modeFilter) => {
@@ -927,7 +951,7 @@ const CashBook = () => {
       cash: { opening: cashOpening, in: cashWithin.inn + cashAdjWithin.inn, out: cashWithin.out + cashAdjWithin.out, closing: cashClosing },
       bank: { opening: bankOpening, in: bankWithin.inn + bankAdjWithin.inn, out: bankWithin.out + bankAdjWithin.out, closing: bankClosing }
     };
-  })();
+  }, [allUnfiltered, allAdjustments, settings, summaryDate, summaryMode]);
 
   if (loading) return <div className="loading">Loading...</div>;
 
