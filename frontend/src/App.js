@@ -1208,6 +1208,22 @@ const CashBook = () => {
         </select>
       </div>
 
+      {/* Always-visible row-count + Show All toggle (separate from filter tags) */}
+      {sortedEntries.length > 0 && (
+        <div style={{padding:'8px 12px', fontSize:'13px', color:'#475569', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap'}}>
+          <span>
+            Showing <strong>{showAllRows || sortedEntries.length <= VISIBLE_ROW_LIMIT ? sortedEntries.length : `${VISIBLE_ROW_LIMIT} of ${sortedEntries.length}`}</strong> entries · Total: <strong>{formatCurrency(filteredTotal)}</strong>
+          </span>
+          {sortedEntries.length > VISIBLE_ROW_LIMIT && (
+            <button
+              data-testid="cb-show-all-toggle"
+              onClick={() => setShowAllRows(s => !s)}
+              style={{background:'#1f2937', color:'#fbbf24', border:'none', padding:'4px 12px', borderRadius:'6px', fontSize:'12px', fontWeight:600, cursor:'pointer'}}
+            >{showAllRows ? `↑ Show only latest ${VISIBLE_ROW_LIMIT}` : `↓ Show all ${sortedEntries.length}`}</button>
+          )}
+        </div>
+      )}
+
       {(filters.type || filters.subType || filters.party || filters.mode) && (
         <div className="filter-summary">
           <strong>Filters:</strong> 
@@ -1215,15 +1231,6 @@ const CashBook = () => {
           {filters.subType && <span className="filter-tag">{filters.subType} <button onClick={() => setFilters({...filters, subType: ""})}>×</button></span>}
           {filters.party && <span className="filter-tag">{filters.party} <button onClick={() => setFilters({...filters, party: ""})}>×</button></span>}
           {filters.mode && <span className="filter-tag">{filters.mode} <button onClick={() => setFilters({...filters, mode: ""})}>×</button></span>}
-          <span className="filter-result">| Showing {showAllRows || sortedEntries.length <= VISIBLE_ROW_LIMIT ? sortedEntries.length : `${VISIBLE_ROW_LIMIT} of ${sortedEntries.length}`} entries | Total: <strong>{formatCurrency(filteredTotal)}</strong>
-          {sortedEntries.length > VISIBLE_ROW_LIMIT && (
-            <button
-              data-testid="cb-show-all-toggle"
-              onClick={() => setShowAllRows(s => !s)}
-              style={{marginLeft:'12px', background:'#1f2937', color:'#fbbf24', border:'none', padding:'3px 10px', borderRadius:'5px', fontSize:'11.5px', fontWeight:600, cursor:'pointer'}}
-            >{showAllRows ? `Show only latest ${VISIBLE_ROW_LIMIT}` : `Show all ${sortedEntries.length}`}</button>
-          )}
-          </span>
         </div>
       )}
 
