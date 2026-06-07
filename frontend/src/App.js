@@ -691,7 +691,7 @@ const CashBook = () => {
   // Composite expense fields (only used when sub_type === "DAILY_EXPENSES")
   const [dailyExp, setDailyExp] = useState({ motor: "", bhussa: "", gawali: "", cash_adv: "" });
 
-  // Fast path (post-insert): only refetch cash-book entries + adjustments. Skip the heavy bepaari/dukandar ledger aggregates.
+  // Fast path (post-insert): only refetch cash-book entries + adjustments.
   const refreshEntries = async () => {
     try {
       let url = `${API}/cash-book?`;
@@ -709,32 +709,28 @@ const CashBook = () => {
     } catch (err) { console.error(err); }
   };
 
-  // Full path (initial load + filter change): fetches everything including current-balance map
   const fetchData = async () => {
     try {
       let url = `${API}/cash-book?`;
       if (filters.fromDate) url += `from_date=${filters.fromDate}&`;
       if (filters.toDate) url += `to_date=${filters.toDate}&`;
-      
-      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes, bepLedgerRes, dukLedgerRes] = await Promise.all([
+
+      // REVERTED: dropped the heavy /bepaari-ledger and /dukandar-ledger fetches
+      // that were causing the page to be slow on every load. The inline balance hint
+      // is now disabled. Page is fast again.
+      const [entriesRes, bepaarisRes, dukandarsRes, advRes, capRes, allRes, settingsRes, adjRes] = await Promise.all([
         axios.get(url), axios.get(`${API}/bepaaris`), axios.get(`${API}/dukandars`),
         axios.get(`${API}/advance-parties`), axios.get(`${API}/capital-partners`),
-        axios.get(`${API}/cash-book`),  // ALL entries for summary calc
+        axios.get(`${API}/cash-book`),
         axios.get(`${API}/settings`),
-        axios.get(`${API}/adjustments`),  // For JV CASH/BANK adjustments
-        axios.get(`${API}/bepaari-ledger`).catch(() => ({ data: [] })),  // for inline balances
-        axios.get(`${API}/dukandar-ledger`).catch(() => ({ data: [] }))
+        axios.get(`${API}/adjustments`)
       ]);
       setAllEntries(entriesRes.data);
       setEntries(entriesRes.data);
       setAllUnfiltered(allRes.data);
       setSettings(settingsRes.data || { opening_cash: 0, opening_bank: 0 });
       setAllAdjustments(adjRes.data || []);
-      // Build a balance lookup map keyed by `${ptype}:${id}` → current closing balance
-      const balMap = {};
-      (bepLedgerRes.data || []).forEach(b => { balMap[`BEPAARI:${b.id}`] = b.balance || 0; });
-      (dukLedgerRes.data || []).forEach(d => { balMap[`DUKANDAR:${d.id}`] = d.balance || 0; });
-      setBalanceMap(balMap);
+      setBalanceMap({}); // empty → inline hint stays hidden
       setParties([
         ...bepaarisRes.data.map(p => ({ ...p, ptype: "BEPAARI" })),
         ...dukandarsRes.data.map(p => ({ ...p, ptype: "DUKANDAR" })),
