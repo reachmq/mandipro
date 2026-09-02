@@ -394,7 +394,7 @@ class TestExpenseWriteoffEdgeCases:
         for adj_id in created_adjustment_ids:
             try:
                 requests.delete(f"{BASE_URL}/api/adjustments/{adj_id}")
-            except:
+            except Exception:
                 pass
     
     def test_08_invalid_expense_head_on_credit_side(self):

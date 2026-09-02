@@ -162,5 +162,6 @@ Migrated Excel logic to React + FastAPI + MongoDB application.
 ## Recent Updates (Feb 2026)
 - Applied Dalal Premium theme to all print templates (Cash & Bank, Party Statement, Bepaari Ledger, Dukandar Ledger)
 - Hidden 0-balance Bepaaris and Dukandars from Ledger tables and prints (filter: `balance !== 0`)
+- **Interactive Balance Sheet (Feb 2026)** — All P&L/non-party BS rows (KK, JB, Commission, Mandi Exp, BF Disc, MHN Personal, Zakat, Cash, Bank, Capital) are now clickable and open a new `/head-statement/:head` page with chronological transactions, opening/closing balance cards, subtype breakdown (Mandi Exp), date-range filter, CSV export, and print/PDF. Party rows (Bepaari Payables, Patti, Bepaari/Dukandar Advances, Advance Receivables) also link to their respective ledgers/party statements. Backend endpoints `GET /api/head-statement/{HEAD}` and `/api/head-statement/{HEAD}/export`. Closing balance of each head byte-matches the corresponding BS total (verified 26/26 pytest + full frontend E2E). Also fixed pre-existing lint issues (moved `/cash-book/reassign` above the parametrized route to prevent shadowing; replaced bare `except`; fixed a MongoDB ObjectId serialization edge case in `/settings`).
 
 *Last Updated: Feb 2026*

@@ -305,7 +305,7 @@ async def get_settings():
     if not settings:
         default = Settings().model_dump()
         await db.settings.insert_one(default)
-        return default
+        return serialize_doc(default)
     return serialize_doc(settings)
 
 @api_router.put("/settings")
@@ -636,6 +636,37 @@ async def create_cash_book_entry(data: CashBookEntryCreate, user: dict = Depends
         user_email=user.get("email", "unknown")
     )
     return serialize_doc(doc)
+
+@api_router.put("/cash-book/reassign")
+async def reassign_cash_book_entries(data: dict):
+    """Reassign cash book entries from one party to another"""
+    entry_ids = data.get("entry_ids", [])
+    new_party_id = data.get("new_party_id")
+    new_party_type = data.get("new_party_type")
+    
+    if not entry_ids or not new_party_id:
+        raise HTTPException(status_code=400, detail="Invalid reassignment data")
+    
+    # Get new party name
+    new_party_name = None
+    for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
+        party = await db[coll].find_one({"id": new_party_id})
+        if party:
+            new_party_name = party.get("name")
+            break
+    
+    if not new_party_name:
+        raise HTTPException(status_code=404, detail="New party not found")
+    
+    # Update all specified entries
+    for entry_id in entry_ids:
+        await db.cash_book.update_one(
+            {"id": entry_id},
+            {"$set": {"party_id": new_party_id, "party_name": new_party_name}}
+        )
+    
+    return {"status": "reassigned", "count": len(entry_ids)}
+
 
 @api_router.delete("/cash-book/{entry_id}")
 async def delete_cash_book_entry(entry_id: str, user: dict = Depends(get_current_user)):
@@ -1593,7 +1624,7 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
         jv_received = sum(a["amount"] for a in adjustments if a.get("credit_type") == "ADVANCE" and a.get("credit_party_id") == ap["id"])
         bal = ap.get("opening_balance", 0) + given - received - jv_paid + jv_received
         if bal != 0:
-            adv_receivables.append({"name": ap["name"], "amount": bal})
+            adv_receivables.append({"id": ap["id"], "name": ap["name"], "amount": bal})
     
     adv_total = sum(a["amount"] for a in adv_receivables if a["amount"] > 0)
     
@@ -1622,6 +1653,412 @@ async def get_balance_sheet(as_on_date: Optional[str] = None, user: dict = Depen
         },
         "difference": total_liab - total_assets
     }
+
+
+# ============== HEAD STATEMENT (Interactive Balance Sheet drilldown) ==============
+# Normal balance & sign conventions:
+#   EXPENSE heads (MANDI_EXPENSE, BF_DISCOUNT, MHN_PERSONAL) → asset-side; Debit increases, Credit decreases
+#   INCOME  heads (KK, JB, COMMISSION, ZAKAT)               → liab-side ; Credit increases, Debit decreases
+#   CASH / BANK                                             → asset-side; Debit (in) increases
+#   CAPITAL                                                 → liab-side ; Credit (taken) increases
+_HEAD_META = {
+    "MANDI_EXPENSE": {"label": "Mandi Expenses", "normal": "debit",  "opening_key": "mandi_exp_opening"},
+    "BF_DISCOUNT":   {"label": "BF Discount",    "normal": "debit",  "opening_key": "bf_disc_opening"},
+    "MHN_PERSONAL":  {"label": "MHN Personal",   "normal": "debit",  "opening_key": "mhn_personal_opening"},
+    "KK":            {"label": "KK",             "normal": "credit", "opening_key": "kk_opening"},
+    "JB":            {"label": "JB",             "normal": "credit", "opening_key": "jb_opening"},
+    "COMMISSION":    {"label": "Commission",     "normal": "credit", "opening_key": "commission_opening"},
+    "ZAKAT":         {"label": "Zakat",          "normal": "credit", "opening_key": "zakat_opening"},
+    "CASH":          {"label": "Cash",           "normal": "debit",  "opening_key": "opening_cash"},
+    "BANK":          {"label": "Bank",           "normal": "debit",  "opening_key": "opening_bank"},
+    "CAPITAL":       {"label": "Capital",        "normal": "credit", "opening_key": None},
+}
+
+_MANDI_EXP_SUBTYPES = ["MANDI", "TRAVEL", "FOOD", "SALARY", "MISC", "OTHER"]
+
+
+async def _head_entries(head_name: str):
+    """Build the full un-filtered chronological entry list for a given head.
+    Each entry: {date, description, subtype, party_name, debit, credit, source, ref_id}"""
+    settings = await get_settings()
+    entries = []
+
+    if head_name == "MANDI_EXPENSE":
+        # Cash book expense entries (all Mandi expense subtypes → debit)
+        cash = serialize_docs(await db.cash_book.find({"sub_type": {"$in": _MANDI_EXP_SUBTYPES}}).to_list(10000))
+        for c in cash:
+            entries.append({
+                "date": c["date"], "description": c.get("particulars") or c.get("sub_type", ""),
+                "subtype": c.get("sub_type", ""), "party_name": c.get("party_name", ""),
+                "debit": c.get("amount", 0), "credit": 0, "source": "cash_book", "ref_id": c.get("id"),
+                "mode": c.get("mode", "")
+            })
+        # JV: debit_type == MANDI_EXPENSE increases; credit_type == MANDI_EXPENSE decreases
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": "MANDI_EXPENSE"}, {"credit_type": "MANDI_EXPENSE"}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == "MANDI_EXPENSE"
+            other_name = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other_name or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other_name or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name == "BF_DISCOUNT":
+        cash = serialize_docs(await db.cash_book.find({"$or": [{"sub_type": "BF_DISC"}, {"bf_disc": {"$gt": 0}}]}).to_list(10000))
+        for c in cash:
+            if c.get("sub_type") == "BF_DISC":
+                entries.append({
+                    "date": c["date"], "description": c.get("particulars") or "BF Discount",
+                    "subtype": "BF_DISC", "party_name": c.get("party_name", ""),
+                    "debit": c.get("amount", 0), "credit": 0, "source": "cash_book", "ref_id": c.get("id"),
+                    "mode": c.get("mode", "")
+                })
+            elif c.get("bf_disc", 0) > 0:
+                entries.append({
+                    "date": c["date"], "description": f"BF Disc within RECEIPT ({c.get('party_name','')})",
+                    "subtype": "IN_RECEIPT", "party_name": c.get("party_name", ""),
+                    "debit": c.get("bf_disc", 0), "credit": 0, "source": "cash_book", "ref_id": c.get("id"),
+                    "mode": c.get("mode", "")
+                })
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": "BF_DISCOUNT"}, {"credit_type": "BF_DISCOUNT"}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == "BF_DISCOUNT"
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name == "MHN_PERSONAL":
+        cash = serialize_docs(await db.cash_book.find({"sub_type": "MHN_PERSONAL"}).to_list(10000))
+        for c in cash:
+            entries.append({
+                "date": c["date"], "description": c.get("particulars") or "MHN Personal",
+                "subtype": "MHN", "party_name": c.get("party_name", ""),
+                "debit": c.get("amount", 0), "credit": 0, "source": "cash_book", "ref_id": c.get("id"),
+                "mode": c.get("mode", "")
+            })
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": "MHN_PERSONAL"}, {"credit_type": "MHN_PERSONAL"}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == "MHN_PERSONAL"
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name == "ZAKAT":
+        cash = serialize_docs(await db.cash_book.find({"type": "ZAKAT"}).to_list(10000))
+        for c in cash:
+            is_provision = c.get("sub_type") == "PROVISION"
+            entries.append({
+                "date": c["date"], "description": c.get("particulars") or f"Zakat {c.get('sub_type','')}",
+                "subtype": c.get("sub_type", ""), "party_name": c.get("party_name", ""),
+                "debit": 0 if is_provision else c.get("amount", 0),
+                "credit": c.get("amount", 0) if is_provision else 0,
+                "source": "cash_book", "ref_id": c.get("id"), "mode": c.get("mode", "")
+            })
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": "ZAKAT"}, {"credit_type": "ZAKAT"}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == "ZAKAT"
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name in ("KK", "JB", "COMMISSION"):
+        # Accrue from daily_sales using per-bepaari rates (mirrors get_bepaari_ledger)
+        bepaaris = {b["id"]: b for b in serialize_docs(await db.bepaaris.find({}).to_list(500))}
+        sales = serialize_docs(await db.daily_sales.find({}).to_list(20000))
+        sales.sort(key=lambda s: s["date"])
+        if head_name == "KK":
+            # KK is per market day per bepaari (unique (bepaari, date)); rate = settings.kk_fixed
+            kk_fixed = settings.get("kk_fixed", 100)
+            seen = set()
+            for s in sales:
+                key = (s["bepaari_id"], s["date"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                b = bepaaris.get(s["bepaari_id"], {})
+                entries.append({
+                    "date": s["date"], "description": f"KK charged — {b.get('name','')} (per market day)",
+                    "subtype": "ACCRUAL", "party_name": b.get("name", ""),
+                    "debit": 0, "credit": kk_fixed, "source": "daily_sales", "ref_id": s.get("id"), "mode": ""
+                })
+        elif head_name == "JB":
+            for s in sales:
+                b = bepaaris.get(s["bepaari_id"], {})
+                jb_rate = b.get("jb_rate_override") if b.get("jb_rate_override") is not None else settings.get("jb_rate", 10)
+                jb_amt = s["quantity"] * jb_rate
+                if jb_amt:
+                    entries.append({
+                        "date": s["date"], "description": f"JB accrued — {b.get('name','')} ({s['quantity']} × {jb_rate})",
+                        "subtype": "ACCRUAL", "party_name": b.get("name", ""),
+                        "debit": 0, "credit": jb_amt, "source": "daily_sales", "ref_id": s.get("id"), "mode": ""
+                    })
+            # JB paid out (debit) from cash book
+            paid = serialize_docs(await db.cash_book.find({"sub_type": "JB_PAID"}).to_list(5000))
+            for c in paid:
+                entries.append({
+                    "date": c["date"], "description": c.get("particulars") or "JB paid out",
+                    "subtype": "PAID", "party_name": c.get("party_name", ""),
+                    "debit": c.get("amount", 0), "credit": 0, "source": "cash_book", "ref_id": c.get("id"),
+                    "mode": c.get("mode", "")
+                })
+        elif head_name == "COMMISSION":
+            for s in sales:
+                b = bepaaris.get(s["bepaari_id"], {})
+                if b.get("flat_rate_per_goat"):
+                    comm = b["flat_rate_per_goat"] * s["quantity"]
+                    desc = f"Commission ({s['quantity']} × flat {b['flat_rate_per_goat']}) — {b.get('name','')}"
+                else:
+                    pct = b.get("commission_percent") if b.get("commission_percent") is not None else settings.get("commission_rate", 4)
+                    comm = s["gross_amount"] * (pct / 100)
+                    desc = f"Commission ({pct}% of {s['gross_amount']}) — {b.get('name','')}"
+                if comm:
+                    entries.append({
+                        "date": s["date"], "description": desc,
+                        "subtype": "ACCRUAL", "party_name": b.get("name", ""),
+                        "debit": 0, "credit": comm, "source": "daily_sales", "ref_id": s.get("id"), "mode": ""
+                    })
+                # Rate diff → extra to commission (credit)
+                if s.get("dukandar_amount"):
+                    rd = s["dukandar_amount"] - s["gross_amount"]
+                    if rd:
+                        entries.append({
+                            "date": s["date"], "description": f"Rate diff — {b.get('name','')} → Dukandar {s.get('dukandar_name','')}",
+                            "subtype": "RATE_DIFF", "party_name": b.get("name", ""),
+                            "debit": 0 if rd > 0 else -rd, "credit": rd if rd > 0 else 0,
+                            "source": "daily_sales", "ref_id": s.get("id"), "mode": ""
+                        })
+                # Discount to dukandar → reduces commission (debit)
+                if s.get("discount"):
+                    entries.append({
+                        "date": s["date"], "description": f"Discount to {s.get('dukandar_name','')} (reduces commission)",
+                        "subtype": "DISCOUNT", "party_name": s.get("dukandar_name", ""),
+                        "debit": s["discount"], "credit": 0, "source": "daily_sales", "ref_id": s.get("id"), "mode": ""
+                    })
+
+        # JVs touching this income head
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": head_name}, {"credit_type": head_name}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == head_name
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name in ("CASH", "BANK"):
+        modes = ["CASH"] if head_name == "CASH" else ["BANK", "UPI", "TRANSFER"]
+        cash_in_types = ["RECEIPT", "TAKEN", "RECEIVED"]
+        cash = serialize_docs(await db.cash_book.find({"mode": {"$in": modes}}).to_list(20000))
+        for c in cash:
+            is_in = c.get("sub_type") in cash_in_types
+            amt = c.get("amount", 0)
+            # RECEIPT: actual cash/bank = amount - bf_disc
+            if c.get("sub_type") == "RECEIPT":
+                amt = amt - c.get("bf_disc", 0)
+            desc_parts = [f"{c.get('type','')} · {c.get('sub_type','')}"]
+            if c.get("party_name"): desc_parts.append(c["party_name"])
+            if c.get("particulars"): desc_parts.append(c["particulars"])
+            entries.append({
+                "date": c["date"], "description": " — ".join(desc_parts),
+                "subtype": c.get("sub_type", ""), "party_name": c.get("party_name", ""),
+                "debit": amt if is_in else 0, "credit": 0 if is_in else amt,
+                "source": "cash_book", "ref_id": c.get("id"), "mode": c.get("mode", "")
+            })
+        adjs = serialize_docs(await db.adjustments.find({"$or": [{"debit_type": head_name}, {"credit_type": head_name}]}).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == head_name
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": other or "",
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    elif head_name == "CAPITAL":
+        partners = serialize_docs(await db.capital_partners.find({"partner_type": "CAPITAL"}).to_list(200))
+        pids = {p["id"]: p["name"] for p in partners}
+        # cash_book type == CAPITAL
+        cash = serialize_docs(await db.cash_book.find({"type": "CAPITAL"}).to_list(10000))
+        for c in cash:
+            st = c.get("sub_type", "")
+            is_credit = st == "TAKEN"  # partner puts money in → liability up
+            entries.append({
+                "date": c["date"], "description": c.get("particulars") or f"{st} — {c.get('party_name','')}",
+                "subtype": st, "party_name": c.get("party_name", ""),
+                "debit": 0 if is_credit else c.get("amount", 0),
+                "credit": c.get("amount", 0) if is_credit else 0,
+                "source": "cash_book", "ref_id": c.get("id"), "mode": c.get("mode", "")
+            })
+        # JVs where CAPITAL party is on either side
+        adjs = serialize_docs(await db.adjustments.find({
+            "$or": [
+                {"debit_type": "CAPITAL", "debit_party_id": {"$in": list(pids.keys())}},
+                {"credit_type": "CAPITAL", "credit_party_id": {"$in": list(pids.keys())}}
+            ]
+        }).to_list(5000))
+        for a in adjs:
+            is_debit = a.get("debit_type") == "CAPITAL" and a.get("debit_party_id") in pids
+            party_name = pids.get(a.get("debit_party_id") if is_debit else a.get("credit_party_id"), "")
+            other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
+            entries.append({
+                "date": a["date"],
+                "description": f"JV: {party_name} {'Debit' if is_debit else 'Credit'} vs {other or ''} — {a.get('narration','')}".strip(),
+                "subtype": "JV", "party_name": party_name,
+                "debit": a["amount"] if is_debit else 0,
+                "credit": 0 if is_debit else a["amount"],
+                "source": "adjustment", "ref_id": a.get("id"), "mode": ""
+            })
+
+    return entries
+
+
+@api_router.get("/head-statement/{head_name}")
+async def get_head_statement(
+    head_name: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(require_admin)
+):
+    """Chronological statement for a P&L / non-party balance-sheet head.
+    Supports date-range filter; opening_balance is rolled forward to `from_date`."""
+    head_name = head_name.upper()
+    if head_name not in _HEAD_META:
+        raise HTTPException(status_code=404, detail=f"Unknown head '{head_name}'")
+
+    meta = _HEAD_META[head_name]
+    settings = await get_settings()
+
+    # 1. Book opening from settings/masters
+    if head_name == "CAPITAL":
+        partners = serialize_docs(await db.capital_partners.find({"partner_type": "CAPITAL"}).to_list(200))
+        book_opening = sum(p.get("opening_balance", 0) for p in partners)
+    else:
+        book_opening = settings.get(meta["opening_key"], 0) if meta["opening_key"] else 0
+
+    # 2. Fetch all entries
+    all_entries = await _head_entries(head_name)
+    all_entries.sort(key=lambda e: (e["date"], e.get("source", ""), e.get("ref_id") or ""))
+
+    # 3. Compute effective opening (book_opening + everything before from_date)
+    def signed_delta(e):
+        # Delta to running balance in "natural" direction (positive when head grows)
+        if meta["normal"] == "debit":
+            return e["debit"] - e["credit"]
+        else:
+            return e["credit"] - e["debit"]
+
+    filtered = []
+    opening = book_opening
+    for e in all_entries:
+        if from_date and e["date"] < from_date:
+            opening += signed_delta(e)
+            continue
+        if to_date and e["date"] > to_date:
+            continue
+        filtered.append(e)
+
+    # 4. Running balance
+    running = opening
+    total_debit = 0
+    total_credit = 0
+    for e in filtered:
+        running += signed_delta(e)
+        e["running_balance"] = running
+        total_debit += e["debit"]
+        total_credit += e["credit"]
+
+    # 5. Subtype summary (mainly for MANDI_EXPENSE, but useful for all)
+    subtype_summary = {}
+    for e in filtered:
+        st = e.get("subtype") or "OTHER"
+        if st not in subtype_summary:
+            subtype_summary[st] = {"subtype": st, "debit": 0, "credit": 0, "count": 0}
+        subtype_summary[st]["debit"] += e["debit"]
+        subtype_summary[st]["credit"] += e["credit"]
+        subtype_summary[st]["count"] += 1
+    subtype_list = sorted(subtype_summary.values(),
+                          key=lambda x: -(x["debit"] + x["credit"]))
+
+    return {
+        "head": head_name,
+        "label": meta["label"],
+        "normal_balance": meta["normal"],
+        "book_opening": book_opening,
+        "opening_balance": opening,
+        "entries": filtered,
+        "subtype_summary": subtype_list,
+        "closing_balance": running,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+
+
+@api_router.get("/head-statement/{head_name}/export")
+async def export_head_statement(
+    head_name: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(require_admin)
+):
+    """Export head statement as CSV."""
+    stmt = await get_head_statement(head_name, from_date, to_date, user)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([f"Head Statement: {stmt['label']}"])
+    writer.writerow([f"From: {from_date or 'Beginning'}    To: {to_date or 'Current'}"])
+    writer.writerow([f"Opening Balance: {stmt['opening_balance']}"])
+    writer.writerow([])
+    writer.writerow(["Date", "Description", "Subtype", "Party", "Mode", "Debit", "Credit", "Running Balance", "Source"])
+    for e in stmt["entries"]:
+        writer.writerow([e["date"], e["description"], e.get("subtype", ""), e.get("party_name", ""),
+                         e.get("mode", ""), e["debit"], e["credit"], e["running_balance"], e["source"]])
+    writer.writerow([])
+    writer.writerow(["Totals", "", "", "", "", stmt["total_debit"], stmt["total_credit"], "", ""])
+    writer.writerow(["Closing Balance", "", "", "", "", "", "", stmt["closing_balance"], ""])
+    if stmt["subtype_summary"]:
+        writer.writerow([])
+        writer.writerow(["=== SUBTYPE SUMMARY ==="])
+        writer.writerow(["Subtype", "Debit", "Credit", "Count"])
+        for s in stmt["subtype_summary"]:
+            writer.writerow([s["subtype"], s["debit"], s["credit"], s["count"]])
+    output.seek(0)
+    fname = f"{stmt['label'].replace(' ', '_')}_statement.csv"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={fname}"}
+    )
 
 
 @api_router.get("/dashboard")
@@ -2009,37 +2446,6 @@ async def backfill_balance_transfer(data: dict):
         "amount": amount,
         "transfer_id": transfer_record["id"]
     }
-
-
-@api_router.put("/cash-book/reassign")
-async def reassign_cash_book_entries(data: dict):
-    """Reassign cash book entries from one party to another"""
-    entry_ids = data.get("entry_ids", [])
-    new_party_id = data.get("new_party_id")
-    new_party_type = data.get("new_party_type")
-    
-    if not entry_ids or not new_party_id:
-        raise HTTPException(status_code=400, detail="Invalid reassignment data")
-    
-    # Get new party name
-    new_party_name = None
-    for coll in ["bepaaris", "dukandars", "advance_parties", "capital_partners"]:
-        party = await db[coll].find_one({"id": new_party_id})
-        if party:
-            new_party_name = party.get("name")
-            break
-    
-    if not new_party_name:
-        raise HTTPException(status_code=404, detail="New party not found")
-    
-    # Update all specified entries
-    for entry_id in entry_ids:
-        await db.cash_book.update_one(
-            {"id": entry_id},
-            {"$set": {"party_id": new_party_id, "party_name": new_party_name}}
-        )
-    
-    return {"status": "reassigned", "count": len(entry_ids)}
 
 
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
@@ -2494,7 +2900,7 @@ async def get_collections_view():
                     pdate = dt.strptime(p["date"], "%Y-%m-%d")
                     tdate = dt.strptime(today, "%Y-%m-%d")
                     days_old = (tdate - pdate).days
-                except:
+                except Exception:
                     days_old = 0
             if days_old > 7:
                 overdue_tranches.append({
@@ -2584,7 +2990,7 @@ async def get_payment_aging(dukandar_id: str):
             from datetime import datetime as dt
             try:
                 days_old = (dt.strptime(today, "%Y-%m-%d") - dt.strptime(p["date"], "%Y-%m-%d")).days
-            except:
+            except Exception:
                 days_old = 0
         
         cleared = p["original"] - p["remaining"]

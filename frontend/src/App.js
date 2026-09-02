@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
-import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate, useSearchParams, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
 import BepariAakda from "./BepariAakda";
@@ -3294,6 +3294,7 @@ const BalanceSheet = () => {
   const [data, setData] = useState(null);
   const [asOnDate, setAsOnDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchData = async () => {
     const url = asOnDate ? `${API}/balance-sheet?as_on_date=${asOnDate}` : `${API}/balance-sheet`;
@@ -3308,6 +3309,16 @@ const BalanceSheet = () => {
 
   const { liabilities: L, assets: A, difference } = data;
 
+  // Clickable head row → head-statement page (with as_on_date as to_date)
+  const goHead = (head) => {
+    const q = asOnDate ? `?to_date=${asOnDate}` : '';
+    navigate(`/head-statement/${head}${q}`);
+  };
+  const headLinkStyle = { cursor: 'pointer', color: '#1e40af', textDecoration: 'underline dotted', fontWeight: 600 };
+  const HeadLink = ({ head, children, testid }) => (
+    <span data-testid={testid} onClick={() => goHead(head)} style={headLinkStyle} title={`View ${head} statement`}>{children}</span>
+  );
+
   return (
     <div className="page">
       <h2>Balance Sheet {data.as_on_date !== "Current" ? `(As on ${data.as_on_date})` : ""}</h2>
@@ -3321,6 +3332,10 @@ const BalanceSheet = () => {
       <div className={`balance-status ${difference === 0 ? "tallied" : "not-tallied"}`}>
         {difference === 0 ? "BALANCE SHEET TALLIED" : `DIFFERENCE: ${formatCurrency(difference)}`}
       </div>
+
+      <div style={{fontSize:'12px', color:'#718096', margin:'6px 0 12px', textAlign:'center'}}>
+        Tip: click any underlined head or party name to open its full statement.
+      </div>
       
       <div className="bs-container">
         <div className="bs-section">
@@ -3330,14 +3345,14 @@ const BalanceSheet = () => {
               {/* Capital - Individual names */}
               {L.capital_list && L.capital_list.length > 0 ? (
                 <>
-                  <tr className="section-header"><td colSpan="2"><strong>Capital</strong></td></tr>
+                  <tr className="section-header"><td colSpan="2"><strong><HeadLink head="CAPITAL" testid="bs-capital-head">Capital</HeadLink></strong></td></tr>
                   {L.capital_list.map((p, i) => (
                     <tr key={i} className="sub-item"><td>&nbsp;&nbsp;{p.name}</td><td>{formatCurrency(p.amount)}</td></tr>
                   ))}
                   {L.capital_list.length > 1 && <tr className="sub-total"><td>&nbsp;&nbsp;<em>Total Capital</em></td><td><em>{formatCurrency(L.capital)}</em></td></tr>}
                 </>
               ) : (
-                <tr><td>Capital</td><td>{formatCurrency(L.capital)}</td></tr>
+                <tr><td><HeadLink head="CAPITAL" testid="bs-capital-row">Capital</HeadLink></td><td>{formatCurrency(L.capital)}</td></tr>
               )}
               
               {/* Loans - Individual names */}
@@ -3366,13 +3381,13 @@ const BalanceSheet = () => {
                 <tr><td>Amanat</td><td>{formatCurrency(L.amanat)}</td></tr>
               ) : null}
               
-              <tr><td>Bepaari Payables</td><td>{formatCurrency(L.bepaari_payables)}</td></tr>
-              {L.dukandar_advances > 0 && <tr><td>Dukandar Advances</td><td>{formatCurrency(L.dukandar_advances)}</td></tr>}
-              <tr className="sub-item"><td>JB Total</td><td>{formatCurrency(L.jb.total)}</td></tr>
-              <tr className="sub-item"><td>KK Total</td><td>{formatCurrency(L.kk.total)}</td></tr>
-              <tr className="sub-item"><td>Commission Total</td><td>{formatCurrency(L.commission.total)}</td></tr>
+              <tr><td><span data-testid="bs-bepaari-payables" onClick={() => navigate('/bepaari-ledger')} style={headLinkStyle} title="Go to Bepaari Ledger">Bepaari Payables</span></td><td>{formatCurrency(L.bepaari_payables)}</td></tr>
+              {L.dukandar_advances > 0 && <tr><td><span onClick={() => navigate('/dukandar-ledger')} style={headLinkStyle} title="Go to Dukandar Ledger">Dukandar Advances</span></td><td>{formatCurrency(L.dukandar_advances)}</td></tr>}
+              <tr className="sub-item"><td><HeadLink head="JB" testid="bs-jb-row">JB Total</HeadLink></td><td>{formatCurrency(L.jb.total)}</td></tr>
+              <tr className="sub-item"><td><HeadLink head="KK" testid="bs-kk-row">KK Total</HeadLink></td><td>{formatCurrency(L.kk.total)}</td></tr>
+              <tr className="sub-item"><td><HeadLink head="COMMISSION" testid="bs-commission-row">Commission Total</HeadLink></td><td>{formatCurrency(L.commission.total)}</td></tr>
               <tr className="sub-item" style={{fontSize:'11px',color:'#718096'}}><td>&nbsp;&nbsp;Gross Earned: {formatCurrency(L.commission.earned)}{L.commission.rate_diff > 0 ? ` + Rate Diff: ${formatCurrency(L.commission.rate_diff)}` : ''} − Discounts: {formatCurrency(L.commission.discounts)}</td><td></td></tr>
-              {L.zakat > 0 && <tr><td>Zakat Payable</td><td>{formatCurrency(L.zakat)}</td></tr>}
+              {L.zakat > 0 && <tr><td><HeadLink head="ZAKAT" testid="bs-zakat-row">Zakat Payable</HeadLink></td><td>{formatCurrency(L.zakat)}</td></tr>}
               <tr className="total-row"><td><strong>TOTAL LIABILITIES</strong></td><td><strong>{formatCurrency(L.total)}</strong></td></tr>
             </tbody>
           </table>
@@ -3381,18 +3396,209 @@ const BalanceSheet = () => {
           <h3>ASSETS</h3>
           <table>
             <tbody>
-              <tr><td>Cash Balance</td><td>{formatCurrency(A.cash_balance)}</td></tr>
-              <tr><td>Bank Balance</td><td>{formatCurrency(A.bank_balance)}</td></tr>
-              <tr><td>Patti (Dukandar Receivable)</td><td>{formatCurrency(A.patti)}</td></tr>
-              {A.bepaari_advances > 0 && <tr><td>Bepaari Advances</td><td>{formatCurrency(A.bepaari_advances)}</td></tr>}
-              <tr className="sub-item"><td>Mandi Expenses</td><td>{formatCurrency(A.mandi_expenses.total)}</td></tr>
-              <tr className="sub-item"><td>BF Discount</td><td>{formatCurrency(A.bf_discount.total)}</td></tr>
-              <tr className="sub-item"><td>MHN Personal</td><td>{formatCurrency(A.mhn_personal.total)}</td></tr>
-              {A.advance_receivables.map((adv, i) => <tr key={i}><td>{adv.name} Receivable</td><td>{formatCurrency(adv.amount)}</td></tr>)}
+              <tr><td><HeadLink head="CASH" testid="bs-cash-row">Cash Balance</HeadLink></td><td>{formatCurrency(A.cash_balance)}</td></tr>
+              <tr><td><HeadLink head="BANK" testid="bs-bank-row">Bank Balance</HeadLink></td><td>{formatCurrency(A.bank_balance)}</td></tr>
+              <tr><td><span onClick={() => navigate('/dukandar-ledger')} style={headLinkStyle} title="Go to Dukandar Ledger">Patti (Dukandar Receivable)</span></td><td>{formatCurrency(A.patti)}</td></tr>
+              {A.bepaari_advances > 0 && <tr><td><span onClick={() => navigate('/bepaari-ledger')} style={headLinkStyle} title="Go to Bepaari Ledger">Bepaari Advances</span></td><td>{formatCurrency(A.bepaari_advances)}</td></tr>}
+              <tr className="sub-item"><td><HeadLink head="MANDI_EXPENSE" testid="bs-mandiexp-row">Mandi Expenses</HeadLink></td><td>{formatCurrency(A.mandi_expenses.total)}</td></tr>
+              <tr className="sub-item"><td><HeadLink head="BF_DISCOUNT" testid="bs-bfdisc-row">BF Discount</HeadLink></td><td>{formatCurrency(A.bf_discount.total)}</td></tr>
+              <tr className="sub-item"><td><HeadLink head="MHN_PERSONAL" testid="bs-mhn-row">MHN Personal</HeadLink></td><td>{formatCurrency(A.mhn_personal.total)}</td></tr>
+              {A.advance_receivables.map((adv, i) => (
+                <tr key={i}>
+                  <td>
+                    {adv.id ? (
+                      <span onClick={() => navigate(`/party-statement?type=advance&id=${adv.id}`)} style={headLinkStyle} title="View party statement">
+                        {adv.name} Receivable
+                      </span>
+                    ) : `${adv.name} Receivable`}
+                  </td>
+                  <td>{formatCurrency(adv.amount)}</td>
+                </tr>
+              ))}
               <tr className="total-row"><td><strong>TOTAL ASSETS</strong></td><td><strong>{formatCurrency(A.total)}</strong></td></tr>
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ============== HEAD STATEMENT (P&L / non-party head drill-down) ==============
+const HEAD_LABELS = {
+  MANDI_EXPENSE: "Mandi Expenses",
+  BF_DISCOUNT: "BF Discount",
+  MHN_PERSONAL: "MHN Personal",
+  KK: "KK",
+  JB: "JB",
+  COMMISSION: "Commission",
+  ZAKAT: "Zakat",
+  CASH: "Cash",
+  BANK: "Bank",
+  CAPITAL: "Capital",
+};
+
+const HeadStatement = () => {
+  const { head } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const headKey = (head || "").toUpperCase();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState(searchParams.get("from_date") || "");
+  const [toDate, setToDate] = useState(searchParams.get("to_date") || "");
+  const [subtypeFilter, setSubtypeFilter] = useState("ALL");
+
+  const fetch = async () => {
+    setLoading(true);
+    let url = `${API}/head-statement/${headKey}?`;
+    if (fromDate) url += `from_date=${fromDate}&`;
+    if (toDate) url += `to_date=${toDate}&`;
+    try {
+      const res = await axios.get(url);
+      setData(res.data);
+    } catch (e) {
+      alert(e.response?.data?.detail || "Failed to load head statement");
+      setData(null);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetch(); }, [headKey, fromDate, toDate]);
+
+  const downloadCSV = () => {
+    let url = `${API}/head-statement/${headKey}/export?`;
+    if (fromDate) url += `from_date=${fromDate}&`;
+    if (toDate) url += `to_date=${toDate}&`;
+    window.open(url, '_blank');
+  };
+
+  const doPrint = () => window.print();
+
+  if (!HEAD_LABELS[headKey]) {
+    return (
+      <div className="page">
+        <h2>Unknown Head</h2>
+        <p>No statement is available for "{head}".</p>
+        <button onClick={() => navigate('/balance-sheet')}>← Back to Balance Sheet</button>
+      </div>
+    );
+  }
+
+  if (loading || !data) return <div className="loading">Loading...</div>;
+
+  const filteredEntries = subtypeFilter === "ALL"
+    ? data.entries
+    : data.entries.filter(e => (e.subtype || "OTHER") === subtypeFilter);
+
+  const isMandiExp = headKey === "MANDI_EXPENSE";
+  const normalDebit = data.normal_balance === "debit";
+
+  return (
+    <div className="page" data-testid="head-statement-page">
+      <div className="no-print" style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
+        <button onClick={() => navigate('/balance-sheet')} data-testid="hs-back-btn">← Balance Sheet</button>
+        <h2 style={{margin:0}}>{data.label} — Statement</h2>
+      </div>
+
+      <div className="filter-bar no-print" style={{flexWrap:'wrap', gap:8}}>
+        <label>From:</label>
+        <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} data-testid="hs-from-date" />
+        <label>To:</label>
+        <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} data-testid="hs-to-date" />
+        {(fromDate || toDate) && <button className="btn-clear" onClick={() => { setFromDate(""); setToDate(""); }} data-testid="hs-clear-dates">Clear</button>}
+        <span style={{flex:1}}></span>
+        <button onClick={downloadCSV} data-testid="hs-export-csv">📊 CSV</button>
+        <button onClick={doPrint} data-testid="hs-print">🖨 Print / PDF</button>
+      </div>
+
+      {/* Summary chips */}
+      <div className="hs-summary-cards" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))', gap:12, margin:'12px 0'}}>
+        <div className="hs-card" style={{padding:12, background:'#f7fafc', border:'1px solid #e2e8f0', borderRadius:6}}>
+          <div style={{fontSize:11, color:'#718096'}}>Opening Balance</div>
+          <div style={{fontSize:18, fontWeight:700}} data-testid="hs-opening">{formatCurrency(data.opening_balance)}</div>
+        </div>
+        <div className="hs-card" style={{padding:12, background:'#f7fafc', border:'1px solid #e2e8f0', borderRadius:6}}>
+          <div style={{fontSize:11, color:'#718096'}}>Total Debit</div>
+          <div style={{fontSize:18, fontWeight:700, color:'#c53030'}}>{formatCurrency(data.total_debit)}</div>
+        </div>
+        <div className="hs-card" style={{padding:12, background:'#f7fafc', border:'1px solid #e2e8f0', borderRadius:6}}>
+          <div style={{fontSize:11, color:'#718096'}}>Total Credit</div>
+          <div style={{fontSize:18, fontWeight:700, color:'#2f855a'}}>{formatCurrency(data.total_credit)}</div>
+        </div>
+        <div className="hs-card" style={{padding:12, background:'#fefcbf', border:'1px solid #d69e2e', borderRadius:6}}>
+          <div style={{fontSize:11, color:'#744210'}}>Closing Balance ({data.normal_balance === 'debit' ? 'Dr' : 'Cr'})</div>
+          <div style={{fontSize:18, fontWeight:800}} data-testid="hs-closing">{formatCurrency(data.closing_balance)}</div>
+        </div>
+      </div>
+
+      {/* Mandi Exp subtype summary card + filter */}
+      {isMandiExp && data.subtype_summary.length > 0 && (
+        <div style={{marginBottom:16, padding:12, background:'#fff', border:'1px solid #e2e8f0', borderRadius:6}} data-testid="hs-subtype-summary">
+          <div style={{fontWeight:700, marginBottom:8}}>Breakdown by Subtype</div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:8}}>
+            {data.subtype_summary.map(s => (
+              <div key={s.subtype}
+                   onClick={() => setSubtypeFilter(subtypeFilter === s.subtype ? "ALL" : s.subtype)}
+                   className="no-print"
+                   style={{
+                     cursor:'pointer', padding:8, borderRadius:4,
+                     background: subtypeFilter === s.subtype ? '#bee3f8' : '#edf2f7',
+                     border: subtypeFilter === s.subtype ? '2px solid #2b6cb0' : '1px solid #cbd5e0'
+                   }}
+                   data-testid={`hs-subtype-chip-${s.subtype}`}>
+                <div style={{fontSize:11, color:'#4a5568', fontWeight:600}}>{s.subtype}</div>
+                <div style={{fontSize:14, fontWeight:700}}>{formatCurrency(normalDebit ? s.debit - s.credit : s.credit - s.debit)}</div>
+                <div style={{fontSize:10, color:'#718096'}}>{s.count} entries</div>
+              </div>
+            ))}
+          </div>
+          {subtypeFilter !== "ALL" && (
+            <button className="no-print" style={{marginTop:8}} onClick={() => setSubtypeFilter("ALL")} data-testid="hs-clear-subtype">Show All Subtypes</button>
+          )}
+        </div>
+      )}
+
+      {/* Full chronological table */}
+      <div className="table-wrap">
+        <table data-testid="hs-entries-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Subtype</th>
+              <th>Party</th>
+              <th>Mode</th>
+              <th style={{textAlign:'right'}}>Debit</th>
+              <th style={{textAlign:'right'}}>Credit</th>
+              <th style={{textAlign:'right'}}>Balance ({data.normal_balance === 'debit' ? 'Dr' : 'Cr'})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredEntries.length === 0 ? (
+              <tr><td colSpan={8} style={{textAlign:'center', color:'#718096', padding:20}}>No entries in this range.</td></tr>
+            ) : filteredEntries.map((e, i) => (
+              <tr key={`${e.source}-${e.ref_id}-${i}`}>
+                <td>{e.date}</td>
+                <td>{e.description}</td>
+                <td>{e.subtype || '—'}</td>
+                <td>{e.party_name || '—'}</td>
+                <td>{e.mode || '—'}</td>
+                <td style={{textAlign:'right', color: e.debit ? '#c53030' : '#a0aec0'}}>{e.debit ? formatCurrency(e.debit) : '—'}</td>
+                <td style={{textAlign:'right', color: e.credit ? '#2f855a' : '#a0aec0'}}>{e.credit ? formatCurrency(e.credit) : '—'}</td>
+                <td style={{textAlign:'right', fontWeight:600}}>{formatCurrency(e.running_balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr style={{fontWeight:700, background:'#f7fafc'}}>
+              <td colSpan={5} style={{textAlign:'right'}}>Totals</td>
+              <td style={{textAlign:'right', color:'#c53030'}}>{formatCurrency(data.total_debit)}</td>
+              <td style={{textAlign:'right', color:'#2f855a'}}>{formatCurrency(data.total_credit)}</td>
+              <td style={{textAlign:'right'}}>{formatCurrency(data.closing_balance)}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
@@ -4183,6 +4389,7 @@ function App() {
                     <Route path="/bepaari-ledger" element={<BepariLedger />} />
                     <Route path="/dukandar-ledger" element={<DukandarLedger />} />
                     <Route path="/balance-sheet" element={<AdminRoute><BalanceSheet /></AdminRoute>} />
+                    <Route path="/head-statement/:head" element={<AdminRoute><HeadStatement /></AdminRoute>} />
                     <Route path="/bepaari-aakda" element={<BepariAakda />} />
                     <Route path="/party-statement" element={<PartyStatement />} />
                     <Route path="/masters" element={<AdminRoute><Masters /></AdminRoute>} />
