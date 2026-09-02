@@ -1676,6 +1676,7 @@ _HEAD_META = {
     "CASH":          {"label": "Cash",           "normal": "debit",  "opening_key": "opening_cash"},
     "BANK":          {"label": "Bank",           "normal": "debit",  "opening_key": "opening_bank"},
     "CAPITAL":       {"label": "Capital",        "normal": "credit", "opening_key": None},
+    "AMANAT":        {"label": "Amanat",         "normal": "credit", "opening_key": None},
 }
 
 _MANDI_EXP_SUBTYPES = ["MANDI", "TRAVEL", "FOOD", "SALARY", "MISC", "OTHER"]
@@ -1907,12 +1908,16 @@ async def _head_entries(head_name: str):
                 "source": "adjustment", "ref_id": a.get("id"), "mode": ""
             })
 
-    elif head_name == "CAPITAL":
-        partners = serialize_docs(await db.capital_partners.find({"partner_type": "CAPITAL"}).to_list(200))
+    elif head_name in ("CAPITAL", "AMANAT"):
+        # Match BS logic: only active partners are counted
+        partners = serialize_docs(await db.capital_partners.find({"partner_type": head_name, "is_active": True}).to_list(200))
         pids = {p["id"]: p["name"] for p in partners}
-        # cash_book type == CAPITAL
-        cash = serialize_docs(await db.cash_book.find({"type": "CAPITAL"}).to_list(10000))
+        active_names = set(pids.values())
+        # cash_book type == head_name AND party_name is one of the active partners
+        cash = serialize_docs(await db.cash_book.find({"type": head_name}).to_list(10000))
         for c in cash:
+            if c.get("party_name") not in active_names:
+                continue
             st = c.get("sub_type", "")
             is_credit = st == "TAKEN"  # partner puts money in → liability up
             entries.append({
@@ -1922,15 +1927,15 @@ async def _head_entries(head_name: str):
                 "credit": c.get("amount", 0) if is_credit else 0,
                 "source": "cash_book", "ref_id": c.get("id"), "mode": c.get("mode", "")
             })
-        # JVs where CAPITAL party is on either side
+        # JVs where an active partner (of this type) is on either side
         adjs = serialize_docs(await db.adjustments.find({
             "$or": [
-                {"debit_type": "CAPITAL", "debit_party_id": {"$in": list(pids.keys())}},
-                {"credit_type": "CAPITAL", "credit_party_id": {"$in": list(pids.keys())}}
+                {"debit_type": head_name, "debit_party_id": {"$in": list(pids.keys())}},
+                {"credit_type": head_name, "credit_party_id": {"$in": list(pids.keys())}}
             ]
         }).to_list(5000))
         for a in adjs:
-            is_debit = a.get("debit_type") == "CAPITAL" and a.get("debit_party_id") in pids
+            is_debit = a.get("debit_type") == head_name and a.get("debit_party_id") in pids
             party_name = pids.get(a.get("debit_party_id") if is_debit else a.get("credit_party_id"), "")
             other = a.get("credit_party_name") if is_debit else a.get("debit_party_name")
             entries.append({
@@ -1962,8 +1967,9 @@ async def get_head_statement(
     settings = await get_settings()
 
     # 1. Book opening from settings/masters
-    if head_name == "CAPITAL":
-        partners = serialize_docs(await db.capital_partners.find({"partner_type": "CAPITAL"}).to_list(200))
+    if head_name in ("CAPITAL", "AMANAT"):
+        # Match BS: only active partners contribute to opening
+        partners = serialize_docs(await db.capital_partners.find({"partner_type": head_name, "is_active": True}).to_list(200))
         book_opening = sum(p.get("opening_balance", 0) for p in partners)
     else:
         book_opening = settings.get(meta["opening_key"], 0) if meta["opening_key"] else 0

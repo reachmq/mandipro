@@ -3371,14 +3371,14 @@ const BalanceSheet = () => {
               {/* Amanat - Individual names */}
               {L.amanat_list && L.amanat_list.length > 0 ? (
                 <>
-                  <tr className="section-header"><td colSpan="2"><strong>Amanat</strong></td></tr>
+                  <tr className="section-header"><td colSpan="2"><strong><HeadLink head="AMANAT" testid="bs-amanat-head">Amanat</HeadLink></strong></td></tr>
                   {L.amanat_list.map((p, i) => (
                     <tr key={i} className="sub-item"><td>&nbsp;&nbsp;{p.name}</td><td>{formatCurrency(p.amount)}</td></tr>
                   ))}
                   {L.amanat_list.length > 1 && <tr className="sub-total"><td>&nbsp;&nbsp;<em>Total Amanat</em></td><td><em>{formatCurrency(L.amanat)}</em></td></tr>}
                 </>
               ) : L.amanat > 0 ? (
-                <tr><td>Amanat</td><td>{formatCurrency(L.amanat)}</td></tr>
+                <tr><td><HeadLink head="AMANAT" testid="bs-amanat-row">Amanat</HeadLink></td><td>{formatCurrency(L.amanat)}</td></tr>
               ) : null}
               
               <tr><td><span data-testid="bs-bepaari-payables" onClick={() => navigate('/bepaari-ledger')} style={headLinkStyle} title="Go to Bepaari Ledger">Bepaari Payables</span></td><td>{formatCurrency(L.bepaari_payables)}</td></tr>
@@ -3436,6 +3436,7 @@ const HEAD_LABELS = {
   CASH: "Cash",
   BANK: "Bank",
   CAPITAL: "Capital",
+  AMANAT: "Amanat",
 };
 
 const HeadStatement = () => {
