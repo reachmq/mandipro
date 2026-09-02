@@ -321,7 +321,7 @@ async def update_settings(updates: dict, user: dict = Depends(require_admin)):
 
 # ============== BEPAARI ==============
 @api_router.get("/bepaaris")
-async def get_bepaaris():
+async def get_bepaaris(user: dict = Depends(get_current_user)):
     bepaaris = await db.bepaaris.find({"is_active": True}).to_list(500)
     return serialize_docs(bepaaris)
 
@@ -355,7 +355,7 @@ async def delete_bepaari(bepaari_id: str):
 
 # ============== DUKANDAR ==============
 @api_router.get("/dukandars")
-async def get_dukandars():
+async def get_dukandars(user: dict = Depends(get_current_user)):
     dukandars = await db.dukandars.find({"is_active": True}).to_list(500)
     return serialize_docs(dukandars)
 
@@ -386,7 +386,7 @@ async def delete_dukandar(dukandar_id: str):
 
 # ============== ADVANCE PARTIES ==============
 @api_router.get("/advance-parties")
-async def get_advance_parties():
+async def get_advance_parties(user: dict = Depends(get_current_user)):
     parties = await db.advance_parties.find({"is_active": True}).to_list(100)
     return serialize_docs(parties)
 
@@ -416,7 +416,7 @@ async def delete_advance_party(party_id: str):
 
 # ============== CAPITAL PARTNERS ==============
 @api_router.get("/capital-partners")
-async def get_capital_partners():
+async def get_capital_partners(user: dict = Depends(get_current_user)):
     partners = await db.capital_partners.find({"is_active": True}).to_list(100)
     return serialize_docs(partners)
 
@@ -457,7 +457,8 @@ async def get_daily_sales(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     bepaari_id: Optional[str] = None,
-    dukandar_id: Optional[str] = None
+    dukandar_id: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
     query = {}
     if date:
@@ -583,7 +584,8 @@ async def get_cash_book(
     to_date: Optional[str] = None,
     party_id: Optional[str] = None,
     type: Optional[str] = None,
-    sub_type: Optional[str] = None
+    sub_type: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
     query = {}
     if date:
@@ -710,6 +712,7 @@ async def get_advance_party_statement(
     party_id: str,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    user: dict = Depends(get_current_user),
 ):
     """Statement for an Advance Party (money lent/borrowed to non-trade parties like KMN, JUNAID ADV, etc.).
     Includes: opening balance + Cash Book entries (Type=ADVANCE) + JVs touching this party.
@@ -856,7 +859,8 @@ async def get_party_statement(
     party_type: str,
     party_id: str,
     from_date: Optional[str] = None,
-    to_date: Optional[str] = None
+    to_date: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
     """Get complete statement for a Bepaari or Dukandar"""
     
@@ -1213,7 +1217,7 @@ async def export_party_statement(
 
 # ============== BEPAARI LEDGER ==============
 @api_router.get("/bepaari-ledger")
-async def get_bepaari_ledger(as_on_date: Optional[str] = None):
+async def get_bepaari_ledger(as_on_date: Optional[str] = None, user: dict = Depends(get_current_user)):
     bepaaris = await db.bepaaris.find({"is_active": True}).to_list(500)
     
     sales_query = {}
@@ -1328,7 +1332,7 @@ async def get_bepaari_ledger(as_on_date: Optional[str] = None):
 
 # ============== DUKANDAR LEDGER ==============
 @api_router.get("/dukandar-ledger")
-async def get_dukandar_ledger(as_on_date: Optional[str] = None):
+async def get_dukandar_ledger(as_on_date: Optional[str] = None, user: dict = Depends(get_current_user)):
     dukandars = await db.dukandars.find({"is_active": True}).to_list(500)
     
     sales_query = {}
@@ -2062,7 +2066,7 @@ async def export_head_statement(
 
 
 @api_router.get("/dashboard")
-async def get_dashboard():
+async def get_dashboard(user: dict = Depends(get_current_user)):
     today = datetime.utcnow().strftime("%Y-%m-%d")
     today_sales = serialize_docs(await db.daily_sales.find({"date": today}).to_list(100))
     balance_sheet = await get_balance_sheet()
@@ -2450,7 +2454,7 @@ async def backfill_balance_transfer(data: dict):
 
 # ============== BEPAARI AAKDA (Daily Settlement Slip) ==============
 @api_router.get("/bepaari-aakda")
-async def get_bepaari_aakda(date: str):
+async def get_bepaari_aakda(date: str, user: dict = Depends(get_current_user)):
     """Get Aakda (settlement slip) for all Bepaaris for a specific market day"""
     
     bepaaris = serialize_docs(await db.bepaaris.find({"is_active": True}).to_list(500))
@@ -2617,7 +2621,7 @@ async def get_bepaari_aakda(date: str):
 
 
 @api_router.get("/bepaari-aakda/{bepaari_id}")
-async def get_single_bepaari_aakda(bepaari_id: str, date: str):
+async def get_single_bepaari_aakda(bepaari_id: str, date: str, user: dict = Depends(get_current_user)):
     """Get Aakda for a single Bepaari"""
     all_aakda = await get_bepaari_aakda(date)
     for a in all_aakda:
@@ -2938,7 +2942,7 @@ async def get_collections_view():
 
 # ============== PAYMENT AGING (FIFO) for a single Dukandar ==============
 @api_router.get("/payment-aging/{dukandar_id}")
-async def get_payment_aging(dukandar_id: str):
+async def get_payment_aging(dukandar_id: str, user: dict = Depends(get_current_user)):
     """FIFO aging for a single dukandar — returns ALL tranches"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     
